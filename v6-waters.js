@@ -35,9 +35,26 @@
   }
   window.aaOpenOsmWater=async raw=>{
     let w;try{w=typeof raw==='string'?JSON.parse(raw):raw}catch{return}
-    try{const q=await sb.from('waters').select('id').eq('source_key',w.source_key).maybeSingle();if(q.data?.id)return openWater(q.data.id);if(!aaUser){toast('Zum Öffnen als AngelLog-Gewässer bitte anmelden.');return}
-      const row={source_key:w.source_key,name:w.name,water_type:w.water_type,latitude:w.latitude,longitude:w.longitude,website:w.website||null,association:w.operator||null,source_name:'OpenStreetMap',source_license:'ODbL',created_by:aaUser.id};
-      const ins=await sb.from('waters').upsert(row,{onConflict:'source_key'}).select('id').single();if(ins.error)return toast(ins.error.message);openWater(ins.data.id)}catch(e){toast('Gewässerprofil konnte nicht geöffnet werden.')}
+    try{
+      const q=await sb.from('waters').select('id').eq('source_key',w.source_key).maybeSingle();
+      if(q.data?.id)return openWater(q.data.id);
+      if(!aaUser){toast('Zum Öffnen als AngelLog-Gewässer bitte anmelden.');return}
+      const row={
+        source_key:w.source_key,
+        name:w.name,
+        water_type:w.water_type||'Gewässer',
+        latitude:w.latitude,
+        longitude:w.longitude,
+        official_url:w.website||null,
+        association:w.operator||null,
+        source_name:w.official?'Landesamt für Umwelt Brandenburg':'OpenStreetMap',
+        source_license:w.official?'Datenlizenz Deutschland – Namensnennung 2.0':'ODbL',
+        created_by:aaUser.id
+      };
+      const ins=await sb.from('waters').upsert(row,{onConflict:'source_key'}).select('id').single();
+      if(ins.error)return toast(ins.error.message);
+      openWater(ins.data.id)
+    }catch(e){toast('Gewässerprofil konnte nicht geöffnet werden.')}
   };
   function bind(){if(typeof aaMap==='undefined'||!aaMap)return setTimeout(bind,150);aaMap.on('moveend zoomend',schedule);loadVisible()}
   function loadProUi(){if(!document.querySelector('link[href="/v6-pro.css"]')){const l=document.createElement('link');l.rel='stylesheet';l.href='/v6-pro.css';document.head.appendChild(l)}if(!document.querySelector('script[src="/v6-pro.js"]')){const s=document.createElement('script');s.src='/v6-pro.js';s.defer=true;document.body.appendChild(s)}}
