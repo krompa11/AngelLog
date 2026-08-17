@@ -55,5 +55,10 @@
     aaMap.on('moveend zoomend',schedule);
     loadVisible();
   }
+  function loadProUi(){
+    if(!document.querySelector('link[href="/v6-pro.css"]')){const l=document.createElement('link');l.rel='stylesheet';l.href='/v6-pro.css';document.head.appendChild(l)}
+    if(!document.querySelector('script[src="/v6-pro.js"]')){const s=document.createElement('script');s.src='/v6-pro.js';s.defer=true;document.body.appendChild(s)}
+  }
+  loadProUi();
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(bind,250));else setTimeout(bind,250);
 })();
