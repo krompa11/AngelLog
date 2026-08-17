@@ -31,10 +31,88 @@
     }catch{}
   }
 
+  function ensureCatchPhotoUi(){
+    const sheet=document.querySelector('#aaSheet'),save=document.querySelector('#aaSaveCatch');
+    if(!sheet||!save)return;
+    const method=document.querySelector('#aaMethod');
+    if(method){
+      const values=[...method.options].map(o=>o.value||o.textContent);
+      const before=[...method.options].find(o=>/Sonstiges/i.test(o.textContent));
+      for(const name of ['Köderfisch','Feedern']){
+        if(values.includes(name))continue;
+        const option=document.createElement('option');option.textContent=name;option.value=name;
+        if(before)method.insertBefore(option,before);else method.appendChild(option)
+      }
+    }
+    if(document.querySelector('#aaCatchPhoto'))return;
+    const wrap=document.createElement('div');wrap.id='aaCatchPhotoWrap';wrap.style.cssText='margin:12px 0 14px';
+    wrap.innerHTML=`<label for="aaCatchPhoto" style="display:block;border:1px dashed #5a5b5c;border-radius:9px;padding:13px;background:#252627;color:#fff;cursor:pointer"><b>📷 Fangfoto aufnehmen / auswählen</b><small style="display:block;color:#999;margin-top:4px">JPG, PNG oder WebP · maximal 8 MB</small></label><input id="aaCatchPhoto" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" style="display:none"><div id="aaCatchPhotoPreview" style="display:none;margin-top:10px;position:relative"><img alt="Fangfoto Vorschau" style="display:block;width:100%;max-height:260px;object-fit:cover;border-radius:9px"><button id="aaCatchPhotoRemove" type="button" style="position:absolute;right:8px;top:8px;border:0;border-radius:999px;background:rgba(0,0,0,.75);color:#fff;width:34px;height:34px;font-size:20px">×</button></div>`;
+    save.parentNode.insertBefore(wrap,save);
+    const input=document.querySelector('#aaCatchPhoto'),preview=document.querySelector('#aaCatchPhotoPreview'),img=preview?.querySelector('img');
+    input?.addEventListener('change',()=>{
+      const file=input.files?.[0];
+      if(!file){if(preview)preview.style.display='none';return}
+      if(!['image/jpeg','image/png','image/webp'].includes(file.type)){toast('Bitte JPG, PNG oder WebP auswählen.');input.value='';return}
+      if(file.size>8*1024*1024){toast('Das Foto darf maximal 8 MB groß sein.');input.value='';return}
+      if(img){if(img.dataset.url)URL.revokeObjectURL(img.dataset.url);const url=URL.createObjectURL(file);img.dataset.url=url;img.src=url}
+      if(preview)preview.style.display='block'
+    });
+    document.querySelector('#aaCatchPhotoRemove')?.addEventListener('click',()=>{
+      if(input)input.value='';if(img?.dataset.url){URL.revokeObjectURL(img.dataset.url);delete img.dataset.url;img.removeAttribute('src')}if(preview)preview.style.display='none'
+    })
+  }
+
+  function photoExtension(type){return type==='image/png'?'png':type==='image/webp'?'webp':'jpg'}
+  async function uploadCatchPhoto(file,visibility){
+    if(!file)return null;
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Bitte JPG, PNG oder WebP auswählen.');
+    if(file.size>8*1024*1024)throw new Error('Das Foto darf maximal 8 MB groß sein.');
+    const bucket=visibility==='public'?'community-catch-photos':'catch-photos';
+    const rand=globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2);
+    const path=`${aaUser.id}/${Date.now()}-${rand}.${photoExtension(file.type)}`;
+    const {error}=await sb.storage.from(bucket).upload(path,file,{cacheControl:'3600',contentType:file.type,upsert:false});
+    if(error)throw error;
+    let photoUrl=null;
+    if(visibility==='public')photoUrl=sb.storage.from(bucket).getPublicUrl(path).data?.publicUrl||null;
+    return {bucket,path,photoUrl}
+  }
+
+  async function saveCatchWithPhoto(){
+    if(!window.aaUser)return toast('Bitte zuerst anmelden.');
+    const species=document.querySelector('#aaSpecies')?.value.trim();if(!species)return toast('Fischart fehlt.');
+    const length=+document.querySelector('#aaLength')?.value||null,weight=+document.querySelector('#aaWeight')?.value||null;
+    const bait=document.querySelector('#aaBait')?.value.trim()||null,method=document.querySelector('#aaMethod')?.value||null;
+    const pref=window.getAngelLogPreferences?.()||{},visibility=document.querySelector('#aaCatchVisibility')?.value||pref.default_catch_visibility||'public';
+    const waterId=window.aaCurrentWater?.id||null,waterName=window.aaCurrentWater?.name||null,file=document.querySelector('#aaCatchPhoto')?.files?.[0]||null;
+    const btn=document.querySelector('#aaSaveCatch'),old=btn?.textContent||'Fang speichern';if(btn){btn.disabled=true;btn.textContent=file?'Foto wird hochgeladen …':'Fang wird gespeichert …'}
+    let uploaded=null;
+    try{
+      uploaded=await uploadCatchPhoto(file,visibility);
+      if(btn)btn.textContent='Fang wird gespeichert …';
+      const {error}=await sb.from('catches').insert({user_id:aaUser.id,species,caught_on:new Date().toISOString().slice(0,10),length_cm:length,weight_kg:weight,bait,method,water_id:waterId,water_name:waterName,visibility,photo_url:uploaded?.photoUrl||null,photo_bucket:uploaded?.bucket||null,photo_path:uploaded?.path||null});
+      if(error)throw error;
+      toast(visibility==='public'?'Fang veröffentlicht.':'Fang privat gespeichert.');
+      const photo=document.querySelector('#aaCatchPhoto'),preview=document.querySelector('#aaCatchPhotoPreview'),img=preview?.querySelector('img');
+      if(photo)photo.value='';if(img?.dataset.url){URL.revokeObjectURL(img.dataset.url);delete img.dataset.url;img.removeAttribute('src')}if(preview)preview.style.display='none';
+      closeAdd();
+      if(waterId&&typeof window.loadIntel==='function')window.loadIntel(waterId);else if(waterId&&typeof loadIntel==='function')loadIntel(waterId);
+      if(typeof loadFeed==='function')loadFeed()
+    }catch(e){
+      if(uploaded?.bucket&&uploaded?.path)try{await sb.storage.from(uploaded.bucket).remove([uploaded.path])}catch{}
+      toast(e?.message||'Fang konnte nicht gespeichert werden.')
+    }finally{if(btn){btn.disabled=false;btn.textContent=old}}
+  }
+
+  function enhanceCatchForm(){
+    ensureCatchPhotoUi();
+    const save=document.querySelector('#aaSaveCatch');if(save)save.onclick=saveCatchWithPhoto
+  }
+
   const baseOpenAdd=window.openAdd;
   window.openAdd=function(){
     if(!window.aaUser)return toast('Bitte zuerst anmelden.');
     syncCatchWaterLabel();
+    ensureCatchPhotoUi();
     return baseOpenAdd?.()
   };
 
@@ -48,6 +126,7 @@
       else toast('Check-in gespeichert. Fang eintragen …');
     }catch{toast('Fangformular wird geöffnet.')}
     syncCatchWaterLabel();
+    ensureCatchPhotoUi();
     window.openAdd();
     if(btn)btn.disabled=false
   };
@@ -55,7 +134,8 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const btn=document.querySelector('#aaCheckinBtn');
     if(btn){btn.onclick=window.checkin;btn.title='Check-in speichern und Fang an diesem Gewässer posten'}
-    document.querySelector('#aaPlus')?.addEventListener('click',()=>setTimeout(syncCatchWaterLabel,20))
+    document.querySelector('#aaPlus')?.addEventListener('click',()=>setTimeout(()=>{syncCatchWaterLabel();enhanceCatchForm()},30));
+    setTimeout(enhanceCatchForm,180)
   },{once:true});
 
   function loadFeature(src,delay){
