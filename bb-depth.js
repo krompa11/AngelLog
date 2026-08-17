@@ -1,5 +1,5 @@
 (()=>{
-  const DATA_URL='https://data.geobasis-bb.de/geofachdaten/Wasser/Hydrologie/seenvermessung.zip';
+  const DATA_URL='/api/seenvermessung';
   const OFFICIAL_MAP='https://apw.brandenburg.de/?th=seenverm&POS-XY=%20327000%7c%205808000%20&POS-OFFSET=8000&POS-MARK=false';
   let officialLayer=null, loading=false, visible=false;
 
@@ -47,7 +47,7 @@
     if(loading)return;
     if(typeof depthMap==='undefined'||!depthMap){
       if(typeof initDepthMap==='function')initDepthMap();
-      await new Promise(r=>setTimeout(r,200));
+      await new Promise(r=>setTimeout(r,250));
     }
     if(officialLayer){
       visible=!visible;
@@ -56,28 +56,29 @@
       setButton();
       return;
     }
-    loading=true;setStatus('Amtliche Tiefendaten werden geladen …');setButton();
+    loading=true;setStatus('Amtliche Tiefendaten werden geladen … Das kann beim ersten Mal etwas dauern.');setButton();
     try{
       await ensureShp();
-      const res=await fetch(DATA_URL,{mode:'cors'});
+      const res=await fetch(DATA_URL,{cache:'no-store'});
       if(!res.ok)throw new Error('HTTP '+res.status);
       const buf=await res.arrayBuffer();
+      if(buf.byteLength<1000)throw new Error('Datensatz leer');
       const parsed=await window.shp(buf);
       const features=flattenGeoJSON(parsed);
       if(!features.length)throw new Error('Keine Geometrien gefunden');
       const vals=features.map(f=>depthValue(f.properties)).filter(Number.isFinite);
       const max=vals.length?Math.max(...vals):1;
       officialLayer=L.geoJSON({type:'FeatureCollection',features},{
-        style:f=>{const d=depthValue(f.properties);return {color:colorFor(d,max),weight:1,fillColor:colorFor(d,max),fillOpacity:.42}},
-        onEachFeature:(f,l)=>{const d=depthValue(f.properties);const p=f.properties||{};const name=p.NAME||p.Name||p.name||p.GEW_NAME||p.SEE_NAME||'';l.bindTooltip(`${name?name+' · ':''}${d!=null?d+' m relative Tiefe':'amtliche Tiefenfläche'}`)}
+        style:f=>{const d=depthValue(f.properties),c=colorFor(d,max);return {color:c,weight:1.2,fillColor:c,fillOpacity:.55}},
+        onEachFeature:(f,l)=>{const d=depthValue(f.properties);const p=f.properties||{};const name=p.NAME||p.Name||p.name||p.GEW_NAME||p.SEE_NAME||p.GEWNAME||'';l.bindTooltip(`${name?name+' · ':''}${d!=null?d+' m relative Tiefe':'amtliche Tiefenfläche'}`)}
       }).addTo(depthMap);
       visible=true;
-      try{depthMap.fitBounds(officialLayer.getBounds(),{padding:[20,20]})}catch{}
+      try{depthMap.fitBounds(officialLayer.getBounds(),{padding:[20,20],maxZoom:12})}catch{}
       setStatus(`${features.length.toLocaleString('de-DE')} amtliche Tiefenflächen geladen · Quelle: Landesamt für Umwelt Brandenburg.`);
       setButton();
     }catch(err){
       console.error('Brandenburg depth layer',err);
-      setStatus('Direktes Laden wurde vom Datenserver/Browser blockiert. Die amtliche Kartenansicht kann trotzdem geöffnet werden.');
+      setStatus('Amtliche Tiefendaten konnten nicht geladen werden: '+(err?.message||'unbekannter Fehler'));
       const fallback=document.getElementById('bbDepthFallback');if(fallback)fallback.classList.remove('hidden');
     }finally{loading=false;setButton()}
   }
@@ -90,7 +91,7 @@
     const firstCard=depth.querySelector('.premium-card');if(!firstCard)return;
     const box=document.createElement('div');
     box.className='official-depth-box';
-    box.innerHTML=`<div class="card-kicker">ONLINE-TIEFEN · BRANDENBURG</div><h3>Amtliche Seenvermessung</h3><p class="muted">Vermessene Seen mit relativen Tiefenflächen des Landes Brandenburg. Datenstand/Abdeckung unterscheiden sich je Gewässer.</p><div class="buttons"><button id="bbDepthBtn" class="primary" type="button">Amtliche Tiefen einblenden</button><a id="bbDepthFallback" class="secondary-link hidden" target="_blank" rel="noopener" href="${OFFICIAL_MAP}">Amtliche Originalkarte öffnen</a></div><div id="bbDepthStatus" class="small status-line">Quelle: Landesamt für Umwelt Brandenburg · Datenlizenz Deutschland – Namensnennung 2.0.</div>`;
+    box.innerHTML=`<div class="card-kicker">ONLINE-TIEFEN · BRANDENBURG</div><h3>Amtliche Seenvermessung</h3><p class="muted">Vermessene Seen mit relativen Tiefenflächen des Landes Brandenburg.</p><div class="buttons"><button id="bbDepthBtn" class="primary" type="button">Amtliche Tiefen einblenden</button><a id="bbDepthFallback" class="secondary-link hidden" target="_blank" rel="noopener" href="${OFFICIAL_MAP}">Amtliche Originalkarte öffnen</a></div><div id="bbDepthStatus" class="small status-line">Quelle: Landesamt für Umwelt Brandenburg · Datenlizenz Deutschland – Namensnennung 2.0.</div>`;
     firstCard.prepend(box);
     document.getElementById('bbDepthBtn').addEventListener('click',loadOfficialDepth);
   }
