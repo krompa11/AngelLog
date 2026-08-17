@@ -24,34 +24,45 @@ async function officialBrandenburgWaters(n,s,e,w){
     const d=await fetchJsonWithTimeout(u,{headers:{accept:'application/json','user-agent':'AngelLog/1.0'}},6000);
     if(!d?.features?.length)continue;
     const out=[];
-    for(const f of d.features){const c=centerOfGeometry(f.geometry),name=featureName(f.properties||{});if(!c||!name)continue;const id=f.id||f.properties?.OBJECTID||f.properties?.FID||name;out.push({source_key:`bb-wfs:${id}`,name,water_type:'See',latitude:c.lat,longitude:c.lon,website:null,operator:null,official:true,source_name:'Landesamt für Umwelt Brandenburg'});if(out.length>=180)break}
+    for(const f of d.features){const c=centerOfGeometry(f.geometry),name=featureName(f.properties||{});if(!c||!name)continue;const id=f.id||f.properties?.OBJECTID||f.properties?.FID||name;out.push({source_key:`bb-wfs:${id}`,name,water_type:'See',water_environment:'freshwater',latitude:c.lat,longitude:c.lon,website:null,operator:null,official:true,source_name:'Landesamt für Umwelt Brandenburg'});if(out.length>=180)break}
     if(out.length)return out;
   }
   return [];
 }
+function waterMeta(t={}){
+  const natural=String(t.natural||'').toLowerCase(),water=String(t.water||'').toLowerCase(),waterway=String(t.waterway||'').toLowerCase(),place=String(t.place||'').toLowerCase();
+  const salt=String(t.salt||'').toLowerCase(),tidal=String(t.tidal||'').toLowerCase();
+  let environment='freshwater';
+  if(salt==='yes'||['bay','strait'].includes(natural)||['sea','ocean'].includes(place))environment='saltwater';
+  else if(water==='lagoon'||tidal==='yes')environment='brackish';
+  let type=water||waterway||natural||place||'Gewässer';
+  const labels={lake:'See',reservoir:'Stausee',pond:'Teich',basin:'Becken',river:'Fluss',canal:'Kanal',water:'Gewässer',bay:'Bucht',strait:'Meerenge',sea:'Meer',ocean:'Ozean',lagoon:'Lagune'};
+  type=labels[type]||type;
+  return {water_type:type,water_environment:environment}
+}
 async function osmWaters(n,s,e,w){
   const box=`${s},${w},${n},${e}`;
-  const query=`[out:json][timeout:10];(way["natural"="water"]["name"](${box});relation["natural"="water"]["name"](${box});way["water"~"lake|reservoir|pond|basin"]["name"](${box});relation["water"~"lake|reservoir|pond|basin"]["name"](${box});way["waterway"~"river|canal"]["name"](${box});relation["waterway"~"river|canal"]["name"](${box}););out center tags qt 260;`;
+  const query=`[out:json][timeout:12];(way["natural"="water"]["name"](${box});relation["natural"="water"]["name"](${box});way["water"~"lake|reservoir|pond|basin|lagoon"]["name"](${box});relation["water"~"lake|reservoir|pond|basin|lagoon"]["name"](${box});way["waterway"~"river|canal"]["name"](${box});relation["waterway"~"river|canal"]["name"](${box});node["natural"~"bay|strait"]["name"](${box});way["natural"~"bay|strait"]["name"](${box});relation["natural"~"bay|strait"]["name"](${box});node["place"~"sea|ocean"]["name"](${box});node["salt"="yes"]["name"](${box});way["salt"="yes"]["name"](${box});relation["salt"="yes"]["name"](${box}););out center tags qt 300;`;
   const endpoints=['https://overpass.private.coffee/api/interpreter','https://overpass-api.de/api/interpreter'];
   let data=null;
-  for(const endpoint of endpoints){data=await fetchJsonWithTimeout(endpoint,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded;charset=UTF-8',accept:'application/json','user-agent':'AngelLog/1.0 (+https://angellogmobileready-3.vercel.app)'},body:'data='+encodeURIComponent(query)},6000);if(data)break}
+  for(const endpoint of endpoints){data=await fetchJsonWithTimeout(endpoint,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded;charset=UTF-8',accept:'application/json','user-agent':'AngelLog/1.0 (+https://angellogmobileready-3.vercel.app)'},body:'data='+encodeURIComponent(query)},7000);if(data)break}
   if(!data)return [];
   const seen=new Set(),waters=[];
   for(const x of data.elements||[]){
     const t=x.tags||{},lat=x.lat??x.center?.lat,lon=x.lon??x.center?.lon,name=t.name;
     if(!name||!Number.isFinite(lat)||!Number.isFinite(lon))continue;
+    if(lat<s-0.05||lat>n+0.05||lon<w-0.05||lon>e+0.05)continue;
     const key=`osm:${x.type}:${x.id}`;if(seen.has(key))continue;seen.add(key);
-    let type=t.water||t.waterway||t.natural||'Gewässer';
-    const labels={lake:'See',reservoir:'Stausee',pond:'Teich',basin:'Becken',river:'Fluss',canal:'Kanal',water:'Gewässer'};type=labels[type]||type;
-    waters.push({source_key:key,name,water_type:type,latitude:lat,longitude:lon,website:t.website||t['contact:website']||null,operator:t.operator||null,osm_type:x.type,osm_id:x.id,official:false,source_name:'OpenStreetMap'});
-    if(waters.length>=220)break
+    const meta=waterMeta(t);
+    waters.push({source_key:key,name,...meta,latitude:lat,longitude:lon,website:t.website||t['contact:website']||null,operator:t.operator||null,osm_type:x.type,osm_id:x.id,official:false,source_name:'OpenStreetMap'});
+    if(waters.length>=240)break
   }
   return waters;
 }
 function mergeWaters(official,osm){
   const out=[],names=[];
   const add=w=>{const n=normalizeName(w.name);if(!n)return;const duplicate=names.some(x=>x.name===n&&Math.abs(x.lat-w.latitude)<0.015&&Math.abs(x.lon-w.longitude)<0.02);if(duplicate)return;names.push({name:n,lat:w.latitude,lon:w.longitude});out.push(w)};
-  official.forEach(add);osm.forEach(add);return out.slice(0,240)
+  official.forEach(add);osm.forEach(add);return out.slice(0,260)
 }
 export default async function handler(req,res){
   const n=Number(req.query.n),s=Number(req.query.s),e=Number(req.query.e),w=Number(req.query.w);
@@ -60,5 +71,5 @@ export default async function handler(req,res){
   const [official,osm]=await Promise.all([officialBrandenburgWaters(n,s,e,w),osmWaters(n,s,e,w)]);
   const waters=mergeWaters(official,osm);
   res.setHeader('Cache-Control','public, s-maxage=600, stale-while-revalidate=3600');
-  return res.status(200).json({source:official.length?'Amtliche Daten + OpenStreetMap':'OpenStreetMap / Overpass API',coverage:'worldwide',count:waters.length,waters})
+  return res.status(200).json({source:official.length?'Amtliche Daten + OpenStreetMap':'OpenStreetMap / Overpass API',coverage:'worldwide',marine:true,count:waters.length,waters})
 }
