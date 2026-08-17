@@ -17,6 +17,21 @@
   tidyNavigation();
   document.addEventListener('DOMContentLoaded',tidyNavigation,{once:true});
 
+  function envLabel(v){return v==='saltwater'?'🌊 Salzwasser':v==='brackish'?'≈ Brackwasser':v==='freshwater'?'💧 Süßwasser':'Noch nicht bestimmt'}
+  function syncWaterEnvironmentUi(){
+    try{
+      const panel=document.querySelector('.aa-tabpanel[data-panel="info"]'),type=document.querySelector('#aaWaterType');if(!panel||!type)return;
+      let row=document.querySelector('#aaWaterEnvironmentRow');
+      if(!row){row=document.createElement('div');row.id='aaWaterEnvironmentRow';row.className='aa-info-row';row.innerHTML='<span>Wasserart</span><strong id="aaWaterEnvironment">–</strong>';type.closest('.aa-info-row')?.insertAdjacentElement('afterend',row)}
+      const el=document.querySelector('#aaWaterEnvironment');if(el)el.textContent=envLabel(window.aaCurrentWater?.water_environment)
+    }catch{}
+  }
+
+  const baseOpenWater=window.openWater;
+  if(typeof baseOpenWater==='function'&&!baseOpenWater.__environment){
+    const wrappedOpenWater=async function(id){const r=await baseOpenWater(id);setTimeout(syncWaterEnvironmentUi,30);return r};wrappedOpenWater.__environment=true;window.openWater=wrappedOpenWater
+  }
+
   function syncCatchWaterLabel(){
     try{
       const sheet=document.querySelector('#aaSheet');if(!sheet)return;
@@ -27,7 +42,7 @@
         sheet.querySelector('h2')?.insertAdjacentElement('afterend',box)
       }
       const w=window.aaCurrentWater;
-      box.innerHTML=w?`<span style="color:#8c8c8c">Gewässer</span><br><b style="color:#fff;font-size:16px">≋ ${esc(w.name||'Gewässer')}</b>`:'<span style="color:#999">Kein Gewässer ausgewählt</span>'
+      box.innerHTML=w?`<span style="color:#8c8c8c">Gewässer</span><br><b style="color:#fff;font-size:16px">≋ ${esc(w.name||'Gewässer')}</b><small style="display:block;color:#8c8c8c;margin-top:4px">${envLabel(w.water_environment)}</small>`:'<span style="color:#999">Kein Gewässer ausgewählt</span>'
     }catch{}
   }
 
@@ -38,7 +53,7 @@
     if(method){
       const values=[...method.options].map(o=>o.value||o.textContent);
       const before=[...method.options].find(o=>/Sonstiges/i.test(o.textContent));
-      for(const name of ['Köderfisch','Feedern']){
+      for(const name of ['Köderfisch','Feedern','Brandungsangeln','Pilken','Bootsangeln','Schleppen']){
         if(values.includes(name))continue;
         const option=document.createElement('option');option.textContent=name;option.value=name;
         if(before)method.insertBefore(option,before);else method.appendChild(option)
@@ -135,7 +150,7 @@
     const btn=document.querySelector('#aaCheckinBtn');
     if(btn){btn.onclick=window.checkin;btn.title='Check-in speichern und Fang an diesem Gewässer posten'}
     document.querySelector('#aaPlus')?.addEventListener('click',()=>setTimeout(()=>{syncCatchWaterLabel();enhanceCatchForm()},30));
-    setTimeout(enhanceCatchForm,180)
+    setTimeout(()=>{enhanceCatchForm();syncWaterEnvironmentUi()},180)
   },{once:true});
 
   function loadFeature(src,delay){
