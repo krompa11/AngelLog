@@ -2,6 +2,8 @@
   try{Object.defineProperty(window,'aaUser',{configurable:true,get:()=>aaUser,set:v=>{aaUser=v}})}catch{}
   try{Object.defineProperty(window,'aaCurrentWater',{configurable:true,get:()=>aaCurrentWater,set:v=>{aaCurrentWater=v}})}catch{}
   try{Object.defineProperty(window,'aaMap',{configurable:true,get:()=>aaMap})}catch{}
+  window.setAngelLogMapStyle=style=>{try{aaLayer=style==='satellite'?'sat':'osm';setBaseLayer()}catch{}};
+  window.getAngelLogMapStyle=()=>{try{return aaLayer==='sat'?'satellite':'osm'}catch{return'osm'}};
 
   function loadFeature(src,delay){
     setTimeout(()=>{
@@ -10,5 +12,6 @@
     },delay)
   }
   loadFeature('/v6-user-moderation.js',450);
-  loadFeature('/v6-notifications-appeals.js',650)
+  loadFeature('/v6-notifications-appeals.js',650);
+  loadFeature('/v6-settings.js',850)
 })();
