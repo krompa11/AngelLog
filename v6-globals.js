@@ -23,7 +23,6 @@
       const s=document.createElement('script');s.src=src;s.async=false;document.body.appendChild(s)
     },delay)
   }
-  loadFeature('/v6-water-catch.js',250);
   loadFeature('/v6-user-moderation.js',450);
   loadFeature('/v6-notifications-appeals.js',650);
   loadFeature('/v6-settings.js',850)
