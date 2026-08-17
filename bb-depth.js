@@ -1,109 +1,46 @@
 (()=>{
-  const DATA_URL='/api/seenvermessung';
   const OFFICIAL_MAP='https://apw.brandenburg.de/?th=seenverm&POS-XY=%20327000%7c%205808000%20&POS-OFFSET=8000&POS-MARK=false';
-  let officialLayer=null, loading=false, visible=false, autoStarted=false;
 
-  function ensureShp(){
-    if(window.shp)return Promise.resolve();
-    return new Promise((resolve,reject)=>{
-      const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/shpjs@latest/dist/shp.js';
-      s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
-    });
-  }
-
-  function depthValue(props={}){
-    const entries=Object.entries(props);
-    for(const [k,v] of entries){
-      const key=String(k).toLowerCase();
-      if(key.includes('tiefe')||key.includes('depth')||key.includes('rel')){
-        const n=Number(String(v).replace(',','.'));
-        if(Number.isFinite(n))return n;
-      }
+  function toggleOfficialMap(){
+    const wrap=document.getElementById('bbDepthFrameWrap');
+    const frame=document.getElementById('bbDepthFrame');
+    const btn=document.getElementById('bbDepthBtn');
+    if(!wrap||!frame||!btn)return;
+    const opening=wrap.classList.contains('hidden');
+    wrap.classList.toggle('hidden',!opening);
+    if(opening && !frame.src){
+      frame.src=OFFICIAL_MAP;
+      btn.textContent='Amtliche Karte schließen';
+      setStatus('Amtliche Tiefenkarte wird separat geladen. Dadurch bleibt AngelLog beim Zoomen speicherschonend.');
+    }else if(!opening){
+      btn.textContent='Amtliche Tiefenkarte öffnen';
+      setStatus('Die amtliche Tiefenkarte ist geschlossen. Deine eigenen Sonardaten bleiben auf der AngelLog-Karte verfügbar.');
     }
-    for(const [,v] of entries){const n=Number(String(v).replace(',','.'));if(Number.isFinite(n)&&n>=0&&n<300)return n}
-    return null;
-  }
-
-  function colorFor(d,max){
-    if(d==null)return '#2b7da8';
-    const r=max?Math.max(0,Math.min(1,d/max)):0;
-    if(r<.2)return '#54e1cf';
-    if(r<.4)return '#35b9d5';
-    if(r<.6)return '#2d8fd5';
-    if(r<.8)return '#2567b8';
-    return '#173f78';
-  }
-
-  function flattenGeoJSON(data){
-    if(Array.isArray(data))return data.flatMap(flattenGeoJSON);
-    if(!data)return [];
-    if(data.type==='FeatureCollection')return data.features||[];
-    if(data.type==='Feature')return [data];
-    return [];
-  }
-
-  async function loadOfficialDepth(forceOn=false){
-    if(loading)return;
-    if(typeof depthMap==='undefined'||!depthMap){
-      if(typeof initDepthMap==='function')initDepthMap();
-      await new Promise(r=>setTimeout(r,250));
-    }
-    if(officialLayer){
-      if(forceOn){if(!visible){officialLayer.addTo(depthMap);visible=true}}
-      else{visible=!visible;if(visible)officialLayer.addTo(depthMap);else depthMap.removeLayer(officialLayer)}
-      setStatus(visible?'Amtliche Tiefen eingeblendet.':'Amtliche Tiefen ausgeblendet.');
-      setButton();
-      return;
-    }
-    loading=true;setStatus('Amtliche Tiefendaten werden geladen … Das kann beim ersten Mal etwas dauern.');setButton();
-    try{
-      await ensureShp();
-      const res=await fetch(DATA_URL,{cache:'no-store'});
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      const buf=await res.arrayBuffer();
-      if(buf.byteLength<1000)throw new Error('Datensatz leer');
-      const parsed=await window.shp(buf);
-      const features=flattenGeoJSON(parsed);
-      if(!features.length)throw new Error('Keine Geometrien gefunden');
-      const vals=features.map(f=>depthValue(f.properties)).filter(Number.isFinite);
-      const max=vals.length?Math.max(...vals):1;
-      officialLayer=L.geoJSON({type:'FeatureCollection',features},{
-        style:f=>{const d=depthValue(f.properties),c=colorFor(d,max);return {color:c,weight:1.2,fillColor:c,fillOpacity:.55}},
-        onEachFeature:(f,l)=>{const d=depthValue(f.properties);const p=f.properties||{};const name=p.NAME||p.Name||p.name||p.GEW_NAME||p.SEE_NAME||p.GEWNAME||'';l.bindTooltip(`${name?name+' · ':''}${d!=null?d+' m relative Tiefe':'amtliche Tiefenfläche'}`)}
-      }).addTo(depthMap);
-      visible=true;
-      try{depthMap.fitBounds(officialLayer.getBounds(),{padding:[20,20],maxZoom:12})}catch{}
-      setStatus(`${features.length.toLocaleString('de-DE')} amtliche Tiefenflächen geladen · Quelle: Landesamt für Umwelt Brandenburg.`);
-      setButton();
-    }catch(err){
-      console.error('Brandenburg depth layer',err);
-      setStatus('Amtliche Tiefendaten konnten nicht geladen werden: '+(err?.message||'unbekannter Fehler'));
-      const fallback=document.getElementById('bbDepthFallback');if(fallback)fallback.classList.remove('hidden');
-    }finally{loading=false;setButton()}
   }
 
   function setStatus(t){const el=document.getElementById('bbDepthStatus');if(el)el.textContent=t}
-  function setButton(){const b=document.getElementById('bbDepthBtn');if(b)b.textContent=loading?'Lädt …':(visible?'✓ Amtliche Tiefen an':'Amtliche Tiefen einblenden')}
-
-  function maybeAutoLoad(){
-    const depth=document.getElementById('depth');
-    if(!autoStarted&&depth?.classList.contains('active')){
-      autoStarted=true;
-      setTimeout(()=>loadOfficialDepth(true),350);
-    }
-  }
 
   function installUI(){
-    const depth=document.getElementById('depth');if(!depth||document.getElementById('bbDepthBtn'))return;
-    const firstCard=depth.querySelector('.premium-card');if(!firstCard)return;
+    const depth=document.getElementById('depth');
+    if(!depth||document.getElementById('bbDepthBtn'))return;
+    const firstCard=depth.querySelector('.premium-card');
+    if(!firstCard)return;
     const box=document.createElement('div');
     box.className='official-depth-box';
-    box.innerHTML=`<div class="card-kicker">ONLINE-TIEFEN · BRANDENBURG</div><h3>Amtliche Seenvermessung</h3><p class="muted">Vermessene Seen mit relativen Tiefenflächen des Landes Brandenburg. Die Daten werden beim Öffnen automatisch geladen.</p><div class="buttons"><button id="bbDepthBtn" class="primary" type="button">Amtliche Tiefen einblenden</button><a id="bbDepthFallback" class="secondary-link hidden" target="_blank" rel="noopener" href="${OFFICIAL_MAP}">Amtliche Originalkarte öffnen</a></div><div id="bbDepthStatus" class="small status-line">Quelle: Landesamt für Umwelt Brandenburg · Datenlizenz Deutschland – Namensnennung 2.0.</div>`;
+    box.innerHTML=`
+      <div class="card-kicker">ONLINE-TIEFEN · BRANDENBURG</div>
+      <h3>Amtliche Seenvermessung</h3>
+      <p class="muted">Die amtlichen Tiefendaten werden nicht mehr komplett in den Browser geladen. Das verhindert den bisherigen „Out of Memory“-Absturz beim Zoomen.</p>
+      <div class="buttons">
+        <button id="bbDepthBtn" class="primary" type="button">Amtliche Tiefenkarte öffnen</button>
+        <a class="secondary-link" target="_blank" rel="noopener" href="${OFFICIAL_MAP}">In neuem Tab öffnen</a>
+      </div>
+      <div id="bbDepthStatus" class="small status-line">Quelle: Landesamt für Umwelt Brandenburg · Datenlizenz Deutschland – Namensnennung 2.0.</div>
+      <div id="bbDepthFrameWrap" class="hidden" style="margin-top:14px;border:1px solid rgba(255,255,255,.12);border-radius:16px;overflow:hidden;background:#081319;min-height:520px">
+        <iframe id="bbDepthFrame" title="Amtliche Tiefenkarte Brandenburg" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:520px;border:0;background:#081319"></iframe>
+      </div>`;
     firstCard.prepend(box);
-    document.getElementById('bbDepthBtn').addEventListener('click',()=>loadOfficialDepth(false));
-    new MutationObserver(maybeAutoLoad).observe(depth,{attributes:true,attributeFilter:['class']});
-    maybeAutoLoad();
+    document.getElementById('bbDepthBtn').addEventListener('click',toggleOfficialMap);
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installUI);else installUI();
