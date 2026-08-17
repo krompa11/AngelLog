@@ -1,7 +1,7 @@
 (()=>{
   const DATA_URL='/api/seenvermessung';
   const OFFICIAL_MAP='https://apw.brandenburg.de/?th=seenverm&POS-XY=%20327000%7c%205808000%20&POS-OFFSET=8000&POS-MARK=false';
-  let officialLayer=null, loading=false, visible=false;
+  let officialLayer=null, loading=false, visible=false, autoStarted=false;
 
   function ensureShp(){
     if(window.shp)return Promise.resolve();
@@ -43,15 +43,15 @@
     return [];
   }
 
-  async function loadOfficialDepth(){
+  async function loadOfficialDepth(forceOn=false){
     if(loading)return;
     if(typeof depthMap==='undefined'||!depthMap){
       if(typeof initDepthMap==='function')initDepthMap();
       await new Promise(r=>setTimeout(r,250));
     }
     if(officialLayer){
-      visible=!visible;
-      if(visible)officialLayer.addTo(depthMap);else depthMap.removeLayer(officialLayer);
+      if(forceOn){if(!visible){officialLayer.addTo(depthMap);visible=true}}
+      else{visible=!visible;if(visible)officialLayer.addTo(depthMap);else depthMap.removeLayer(officialLayer)}
       setStatus(visible?'Amtliche Tiefen eingeblendet.':'Amtliche Tiefen ausgeblendet.');
       setButton();
       return;
@@ -86,14 +86,24 @@
   function setStatus(t){const el=document.getElementById('bbDepthStatus');if(el)el.textContent=t}
   function setButton(){const b=document.getElementById('bbDepthBtn');if(b)b.textContent=loading?'Lädt …':(visible?'✓ Amtliche Tiefen an':'Amtliche Tiefen einblenden')}
 
+  function maybeAutoLoad(){
+    const depth=document.getElementById('depth');
+    if(!autoStarted&&depth?.classList.contains('active')){
+      autoStarted=true;
+      setTimeout(()=>loadOfficialDepth(true),350);
+    }
+  }
+
   function installUI(){
     const depth=document.getElementById('depth');if(!depth||document.getElementById('bbDepthBtn'))return;
     const firstCard=depth.querySelector('.premium-card');if(!firstCard)return;
     const box=document.createElement('div');
     box.className='official-depth-box';
-    box.innerHTML=`<div class="card-kicker">ONLINE-TIEFEN · BRANDENBURG</div><h3>Amtliche Seenvermessung</h3><p class="muted">Vermessene Seen mit relativen Tiefenflächen des Landes Brandenburg.</p><div class="buttons"><button id="bbDepthBtn" class="primary" type="button">Amtliche Tiefen einblenden</button><a id="bbDepthFallback" class="secondary-link hidden" target="_blank" rel="noopener" href="${OFFICIAL_MAP}">Amtliche Originalkarte öffnen</a></div><div id="bbDepthStatus" class="small status-line">Quelle: Landesamt für Umwelt Brandenburg · Datenlizenz Deutschland – Namensnennung 2.0.</div>`;
+    box.innerHTML=`<div class="card-kicker">ONLINE-TIEFEN · BRANDENBURG</div><h3>Amtliche Seenvermessung</h3><p class="muted">Vermessene Seen mit relativen Tiefenflächen des Landes Brandenburg. Die Daten werden beim Öffnen automatisch geladen.</p><div class="buttons"><button id="bbDepthBtn" class="primary" type="button">Amtliche Tiefen einblenden</button><a id="bbDepthFallback" class="secondary-link hidden" target="_blank" rel="noopener" href="${OFFICIAL_MAP}">Amtliche Originalkarte öffnen</a></div><div id="bbDepthStatus" class="small status-line">Quelle: Landesamt für Umwelt Brandenburg · Datenlizenz Deutschland – Namensnennung 2.0.</div>`;
     firstCard.prepend(box);
-    document.getElementById('bbDepthBtn').addEventListener('click',loadOfficialDepth);
+    document.getElementById('bbDepthBtn').addEventListener('click',()=>loadOfficialDepth(false));
+    new MutationObserver(maybeAutoLoad).observe(depth,{attributes:true,attributeFilter:['class']});
+    maybeAutoLoad();
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installUI);else installUI();
