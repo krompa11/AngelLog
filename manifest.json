@@ -1,0 +1,11 @@
+{
+  "name": "AngelLog Cloud – Angler App",
+  "short_name": "AngelLog",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#071016",
+  "theme_color": "#071016",
+  "description": "Angler-App mit Login, Cloud-Fangbuch, Gewässersuche und Angelspots"
+}
