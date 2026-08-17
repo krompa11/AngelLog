@@ -2,7 +2,10 @@ function centerOfGeometry(g){
   if(!g||!g.coordinates)return null;
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
   const walk=v=>{if(!Array.isArray(v))return;if(v.length>=2&&typeof v[0]==='number'&&typeof v[1]==='number'){const x=v[0],y=v[1];if(Number.isFinite(x)&&Number.isFinite(y)){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y)}}else v.forEach(walk)};
-  walk(g.coordinates);if(!Number.isFinite(minX))return null;return {lon:(minX+maxX)/2,lat:(minY+maxY)/2};
+  walk(g.coordinates);if(!Number.isFinite(minX))return null;
+  let lon=(minX+maxX)/2,lat=(minY+maxY)/2;
+  if(lon>50&&lon<55&&lat>10&&lat<16){const t=lat;lat=lon;lon=t}
+  return {lon,lat};
 }
 function featureName(p={}){
   const preferred=['name','NAME','Name','gewaessername','GEWAESSERNAME','bezeichnung','BEZEICHNUNG','lw_name','LW_NAME','waterbody_name','WATERBODY_NAME'];
