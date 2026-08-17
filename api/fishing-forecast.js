@@ -3,6 +3,7 @@ function mins(iso){const m=/T(\d{2}):(\d{2})/.exec(iso||'');return m?(+m[1])*60+
 function dateOf(iso){return String(iso||'').slice(0,10)}
 function timeOf(iso){return String(iso||'').slice(11,16)}
 function diffMin(a,b){let d=Math.abs(a-b);return Math.min(d,1440-d)}
+function localEpoch(iso,offsetSeconds){const base=Date.parse(String(iso||'')+'Z');return Number.isFinite(base)?base-(Number(offsetSeconds)||0)*1000:NaN}
 function hourlyScore(i,h,sunByDate){
   let score=5;
   const wind=Number(h.wind_speed_10m?.[i]),pressure=Number(h.pressure_msl?.[i]),cloud=Number(h.cloud_cover?.[i]),rain=Number(h.precipitation?.[i]),pop=Number(h.precipitation_probability?.[i]),temp=Number(h.temperature_2m?.[i]);
@@ -26,7 +27,7 @@ function bestWindows(hours){
   }
   spans.sort((a,b)=>b.score-a.score);
   const out=[];
-  for(const x of spans){if(out.every(y=>Math.abs(new Date(x.start)-new Date(y.start))>3*3600e3)){out.push(x);if(out.length===2)break}}
+  for(const x of spans){const sh=Number(timeOf(x.start).slice(0,2));if(out.every(y=>Math.abs(sh-Number(timeOf(y.start).slice(0,2)))>3)){out.push(x);if(out.length===2)break}}
   return out.map(x=>({from:timeOf(x.start),to:timeOf(x.end),score:x.score}));
 }
 export default async function handler(req,res){
@@ -35,12 +36,12 @@ export default async function handler(req,res){
   const params=new URLSearchParams({latitude:String(lat),longitude:String(lon),timezone:'auto',forecast_days:'3',hourly:'temperature_2m,precipitation_probability,precipitation,pressure_msl,cloud_cover,wind_speed_10m,weather_code',daily:'sunrise,sunset'});
   let r,d;
   try{r=await fetch('https://api.open-meteo.com/v1/forecast?'+params.toString(),{headers:{accept:'application/json','user-agent':'AngelLog/1.0'}});if(!r.ok)throw new Error('HTTP '+r.status);d=await r.json()}catch(e){return res.status(502).json({error:'Wetterdaten derzeit nicht erreichbar'})}
-  const h=d.hourly||{},daily=d.daily||{},sunByDate={};
+  const h=d.hourly||{},daily=d.daily||{},sunByDate={},offset=Number(d.utc_offset_seconds)||0;
   (daily.time||[]).forEach((day,i)=>sunByDate[day]={rise:mins(daily.sunrise?.[i]),set:mins(daily.sunset?.[i])});
   const now=Date.now(),all=(h.time||[]).map((time,i)=>({time,score:hourlyScore(i,h,sunByDate),temperature:h.temperature_2m?.[i],pressure:h.pressure_msl?.[i],wind:h.wind_speed_10m?.[i],precipitation:h.precipitation?.[i],precipitation_probability:h.precipitation_probability?.[i],cloud_cover:h.cloud_cover?.[i],weather_code:h.weather_code?.[i]}));
-  let nearest=all[0]||null,bestDiff=Infinity;for(const x of all){const ms=new Date(x.time).getTime(),df=Math.abs(ms-now);if(df<bestDiff){bestDiff=df;nearest=x}}
+  let nearest=all[0]||null,bestDiff=Infinity;for(const x of all){const ms=localEpoch(x.time,offset),df=Math.abs(ms-now);if(df<bestDiff){bestDiff=df;nearest=x}}
   const today=dateOf(nearest?.time||all[0]?.time),dates=[...new Set(all.map(x=>dateOf(x.time)))];
-  const summaries=dates.slice(0,3).map(day=>{let hours=all.filter(x=>dateOf(x.time)===day);if(day===today)hours=hours.filter(x=>new Date(x.time).getTime()>=now-3600e3);const avg=hours.length?hours.reduce((a,x)=>a+x.score,0)/hours.length:0,best=hours.length?Math.max(...hours.map(x=>x.score)):0;return {date:day,average:+avg.toFixed(1),best:+best.toFixed(1),windows:bestWindows(hours)}});
+  const summaries=dates.slice(0,3).map(day=>{let hours=all.filter(x=>dateOf(x.time)===day);if(day===today)hours=hours.filter(x=>localEpoch(x.time,offset)>=now-3600e3);const avg=hours.length?hours.reduce((a,x)=>a+x.score,0)/hours.length:0,best=hours.length?Math.max(...hours.map(x=>x.score)):0;return {date:day,average:+avg.toFixed(1),best:+best.toFixed(1),windows:bestWindows(hours)}});
   res.setHeader('Cache-Control','public, s-maxage=600, stale-while-revalidate=1800');
-  return res.status(200).json({source:'Open-Meteo',model:'AngelLog heuristic v1',timezone:d.timezone,current:nearest,days:summaries,hours:all.slice(0,72),disclaimer:'Heuristische Fangprognose aus Wetter und Tageszeit; keine Fanggarantie.'});
+  return res.status(200).json({source:'Open-Meteo',model:'AngelLog heuristic v1',timezone:d.timezone,utc_offset_seconds:offset,current:nearest,days:summaries,hours:all.slice(0,72),disclaimer:'Heuristische Fangprognose aus Wetter und Tageszeit; keine Fanggarantie.'});
 }
