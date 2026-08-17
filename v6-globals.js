@@ -5,6 +5,18 @@
   window.setAngelLogMapStyle=style=>{try{aaLayer=style==='satellite'?'sat':'osm';setBaseLayer()}catch{}};
   window.getAngelLogMapStyle=()=>{try{return aaLayer==='sat'?'satellite':'osm'}catch{return'osm'}};
 
+  function tidyNavigation(){
+    try{
+      const conditionMenu=[...document.querySelectorAll('.aa-menu button')].find(b=>b.dataset.screen==='aaConditionsScreen'||/Angelbedingungen/i.test(b.textContent));
+      conditionMenu?.remove();
+      const conditionBottom=document.querySelector('.aa-bottomnav button[data-screen="aaConditionsScreen"]');
+      if(conditionBottom){conditionBottom.dataset.screen='aaForumScreen';conditionBottom.innerHTML='<span>◌</span>Forum'}
+      document.querySelector('#aaConditionsScreen')?.remove();
+    }catch{}
+  }
+  tidyNavigation();
+  document.addEventListener('DOMContentLoaded',tidyNavigation,{once:true});
+
   function loadFeature(src,delay){
     setTimeout(()=>{
       if(document.querySelector(`script[src="${src}"]`))return;
