@@ -104,3 +104,11 @@
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(hook,20));else setTimeout(hook,20);
 })();
+
+(()=>{
+  if(document.querySelector('script[src="/v6-forum.js"]'))return;
+  const s=document.createElement('script');
+  s.src='/v6-forum.js';
+  s.defer=true;
+  document.body.appendChild(s);
+})();
