@@ -1,5 +1,5 @@
 (()=>{
-  const q=s=>document.querySelector(s),safe=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const q=s=>document.querySelector(s),safe=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[m]));
   let waterToken=0;
   const blocked=id=>!!window.AngelLogSafety?.isBlocked?.(id);
   function cleanLabels(){
@@ -9,11 +9,12 @@
     const prices=q('#aaProScreen .pro-prices');if(prices&&!window.AngelLogNativeBilling){prices.style.display='none';let m=q('#aaStoreBillingNote');if(!m){m=document.createElement('div');m.id='aaStoreBillingNote';m.className='pro-note';m.style.margin='15px';m.textContent='AngelLog Pro wird in der mobilen Store-Version sicher über Apple App Store bzw. Google Play verwaltet.';prices.insertAdjacentElement('beforebegin',m)}}
     const forum=[...document.querySelectorAll('.aa-menu button')].find(b=>/Forum/i.test(b.textContent));if(forum&&q('#aaForumScreen'))forum.classList.remove('disabled')
   }
+  function loadReleaseAdmin(){if(document.querySelector('script[data-release-admin="1"]'))return;const s=document.createElement('script');s.src='/v6-release-admin-moderation.js?v=20260818';s.defer=true;s.dataset.releaseAdmin='1';document.body.appendChild(s)}
   async function profiles(ids){if(!ids.length)return new Map();const {data}=await sb.from('profiles').select('id,username,display_name,avatar_url').in('id',[...new Set(ids)]);return new Map((data||[]).map(x=>[x.id,x]))}
   async function renderActiveAnglers(waterId,token){
     const host=q('#aaWaterScreen .aa-avatars');if(!host)return;host.innerHTML='<span style="color:#888;font-size:12px">Wird geladen …</span>';
     const since=new Date(Date.now()-7*86400000).toISOString();const {data}=await sb.from('water_checkins').select('user_id,checked_in_at').eq('water_id',waterId).eq('visibility','public').gte('checked_in_at',since).order('checked_in_at',{ascending:false}).limit(30);if(token!==waterToken)return;
-    const seen=[],ids=[];for(const x of data||[]){if(blocked(x.user_id)||ids.includes(x.user_id))continue;ids.push(x.user_id);seen.push(x);if(ids.length>=8)break}const pm=await profiles(ids);if(token!==waterToken)return;
+    const ids=[];for(const x of data||[]){if(blocked(x.user_id)||ids.includes(x.user_id))continue;ids.push(x.user_id);if(ids.length>=8)break}const pm=await profiles(ids);if(token!==waterToken)return;
     if(!ids.length){host.innerHTML='<span style="color:#888;font-size:12px">Noch keine öffentlichen Check-ins in den letzten 7 Tagen.</span>';return}
     host.innerHTML=ids.map(id=>{const p=pm.get(id),n=p?.display_name||p?.username||'Angler';return `<div class="aa-avatar" title="${safe(n)}">${p?.avatar_url?`<img src="${safe(p.avatar_url)}" alt="${safe(n)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:safe(n.slice(0,1).toUpperCase())}</div>`}).join('')
   }
@@ -27,8 +28,8 @@
   async function waterExtras(waterId){const token=++waterToken;try{await window.AngelLogSafety?.refresh?.()}catch{}await Promise.allSettled([renderActiveAnglers(waterId,token),renderGallery(waterId,token)]);setTimeout(()=>renderFilteredWaterCatches(waterId,token),500)}
   function wireShare(){const b=q('.aa-share');if(!b||b.__release)return;b.__release=true;b.onclick=async()=>{const w=window.aaCurrentWater;if(!w)return;const data={title:`AngelLog · ${w.name||'Gewässer'}`,text:`${w.name||'Gewässer'} in AngelLog ansehen`,url:location.origin+'/v6.html'};try{if(navigator.share)await navigator.share(data);else{await navigator.clipboard.writeText(`${data.text} – ${data.url}`);toast('Link kopiert.')}}catch(e){if(e?.name!=='AbortError')toast('Teilen ist auf diesem Gerät gerade nicht verfügbar.')}}}
   function hookWater(){const fn=window.openWater;if(typeof fn!=='function'||fn.__releasePolish)return;const wrapped=async function(id){const r=await fn.apply(this,arguments);const score=q('#aaFactorScore'),bars=q('#aaBars');if(score)score.textContent='–';if(bars)bars.innerHTML='';waterExtras(id);wireShare();return r};wrapped.__releasePolish=true;window.openWater=wrapped}
-  function bind(){document.addEventListener('click',e=>{if(e.target.closest?.('[data-screen="aaSettingsScreen"],.aa-pro,.aa-gold'))setTimeout(cleanLabels,120)},true);window.addEventListener('angelLog:entitlement',()=>setTimeout(cleanLabels,30))}
-  function boot(){cleanLabels();wireShare();hookWater();bind();setTimeout(()=>{hookWater();cleanLabels()},1800);if(window.aaCurrentWater?.id)waterExtras(aaCurrentWater.id)}
+  function bind(){document.addEventListener('click',e=>{if(e.target.closest?.('[data-screen="aaSettingsScreen"],.aa-pro,.aa-gold'))setTimeout(cleanLabels,120)},true);document.addEventListener('change',e=>{if(e.target?.id==='setLanguage')setTimeout(cleanLabels,250)},true);window.addEventListener('angelLog:entitlement',()=>setTimeout(cleanLabels,30))}
+  function boot(){cleanLabels();loadReleaseAdmin();wireShare();hookWater();bind();setTimeout(()=>{hookWater();cleanLabels()},1800);if(window.aaCurrentWater?.id)waterExtras(aaCurrentWater.id)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,1900),{once:true});else setTimeout(boot,1900);
   window.AngelLogReleasePolish={refresh:cleanLabels,waterExtras}
 })();
