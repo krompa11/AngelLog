@@ -1,6 +1,12 @@
 (()=>{
   let depthLayer=null,depthActive=false,refreshTimer=null,menu=null,statusEl=null,attributionAdded=false;
+  let openFreeLayer=null,openFreeReady=null,openFreeAttribution=false;
   const BB={s:51.15,n:53.75,w:11.0,e:15.2};
+  const OPENFREE_STYLE='https://tiles.openfreemap.org/styles/liberty';
+  const MAPLIBRE_CSS='https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css';
+  const MAPLIBRE_JS='https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js';
+  const MAPLIBRE_LEAFLET='https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js';
+  const legacySetMapStyle=window.setAngelLogMapStyle;
   const q=s=>document.querySelector(s);
   const prefs=()=>window.getAngelLogPreferences?.()||{};
   const lang=()=>prefs().language==='en'?'en':'de';
@@ -23,7 +29,7 @@
     const host=q('.aa-map-screen');if(!host)return null;
     menu=document.createElement('div');menu.id='aaMapLayerMenu';menu.className='aa-map-layer-menu hidden';
     menu.innerHTML=`<div class="aa-map-layer-title">${text('Kartenebenen','Map layers')}</div>
-      <button class="aa-map-layer-option" data-map-layer="osm"><span class="ico">▦</span><span><b>${text('Standardkarte','Standard map')}</b><small>OpenStreetMap</small></span><span class="check"></span></button>
+      <button class="aa-map-layer-option" data-map-layer="osm"><span class="ico">▦</span><span><b>${text('Standardkarte','Standard map')}</b><small>OpenFreeMap · OpenStreetMap</small></span><span class="check"></span></button>
       <button class="aa-map-layer-option" data-map-layer="satellite"><span class="ico">▱</span><span><b>${text('Satellit','Satellite')}</b><small>Esri World Imagery</small></span><span class="check"></span></button>
       <button class="aa-map-layer-option" data-map-layer="depth"><span class="ico">≋</span><span><b>${text('Tiefenkarte','Depth map')}</b><small>${text('Amtliche Seenvermessung Brandenburg','Official Brandenburg lake survey')}</small></span><span class="check"></span></button>
       <div id="aaMapDepthStatus" class="aa-map-depth-status">${text('Tiefenkarte derzeit für Brandenburg.','Depth map currently available for Brandenburg.')}</div>`;
@@ -31,6 +37,61 @@
     menu.querySelectorAll('[data-map-layer]').forEach(b=>b.addEventListener('click',()=>selectLayer(b.dataset.mapLayer)));
     updateChecks();return menu
   }
+
+  function loadCss(href){
+    if(document.querySelector(`link[href="${href}"]`))return;
+    const l=document.createElement('link');l.rel='stylesheet';l.href=href;document.head.appendChild(l)
+  }
+  function loadScript(src){
+    return new Promise((resolve,reject)=>{
+      const existing=document.querySelector(`script[src="${src}"]`);
+      if(existing){if(existing.dataset.loaded==='1')return resolve();existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',reject,{once:true});return}
+      const s=document.createElement('script');s.src=src;s.async=true;s.onload=()=>{s.dataset.loaded='1';resolve()};s.onerror=reject;document.head.appendChild(s)
+    })
+  }
+  function ensureOpenFree(){
+    if(window.maplibregl&&window.L?.maplibreGL)return Promise.resolve();
+    if(openFreeReady)return openFreeReady;
+    openFreeReady=(async()=>{
+      loadCss(MAPLIBRE_CSS);
+      if(!window.maplibregl)await loadScript(MAPLIBRE_JS);
+      if(!window.L?.maplibreGL)await loadScript(MAPLIBRE_LEAFLET);
+      if(!window.L?.maplibreGL)throw new Error('MapLibre Leaflet konnte nicht geladen werden')
+    })();
+    return openFreeReady
+  }
+
+  function addOpenFreeAttribution(){
+    const map=window.aaMap;if(!map||openFreeAttribution)return;
+    try{map.attributionControl?.addAttribution('OpenFreeMap © OpenMapTiles · Data © OpenStreetMap contributors');openFreeAttribution=true}catch{}
+  }
+  function removeOpenFreeAttribution(){
+    const map=window.aaMap;if(!map||!openFreeAttribution)return;
+    try{map.attributionControl?.removeAttribution('OpenFreeMap © OpenMapTiles · Data © OpenStreetMap contributors')}catch{}openFreeAttribution=false
+  }
+  function clearOpenFree(){
+    const map=window.aaMap;if(openFreeLayer&&map)try{map.removeLayer(openFreeLayer)}catch{}
+    openFreeLayer=null;removeOpenFreeAttribution()
+  }
+  async function applyOpenFree(){
+    const map=window.aaMap;if(!map||window.getAngelLogMapStyle?.()==='satellite')return;
+    try{
+      await ensureOpenFree();
+      if(window.getAngelLogMapStyle?.()==='satellite')return;
+      map.eachLayer(l=>{if(l instanceof L.TileLayer)try{map.removeLayer(l)}catch{}});
+      if(openFreeLayer)try{map.removeLayer(openFreeLayer)}catch{}
+      openFreeLayer=L.maplibreGL({style:OPENFREE_STYLE});openFreeLayer.addTo(map);addOpenFreeAttribution()
+    }catch{
+      openFreeLayer=null;removeOpenFreeAttribution()
+    }
+  }
+  function setMapStyle(style){
+    clearOpenFree();
+    legacySetMapStyle?.(style);
+    if(style!=='satellite')setTimeout(applyOpenFree,20);
+    updateChecks()
+  }
+  window.setAngelLogMapStyle=setMapStyle;
 
   function updateChecks(){
     if(!menu)return;
@@ -88,7 +149,7 @@
       depthActive=!depthActive;
       if(depthActive){addAttribution();refreshDepth()}else{clearDepth();removeAttribution();setStatus(text('Tiefenkarte derzeit für Brandenburg.','Depth map currently available for Brandenburg.'))}
     }else{
-      depthActive=false;clearDepth();removeAttribution();window.setAngelLogMapStyle?.(type==='satellite'?'satellite':'osm');setStatus(text('Tiefenkarte derzeit für Brandenburg.','Depth map currently available for Brandenburg.'))
+      depthActive=false;clearDepth();removeAttribution();setMapStyle(type==='satellite'?'satellite':'osm');setStatus(text('Tiefenkarte derzeit für Brandenburg.','Depth map currently available for Brandenburg.'))
     }
     updateChecks();closeMenu()
   }
@@ -100,11 +161,13 @@
   function boot(){
     addStyles();ensureMenu();const btn=q('#aaSearchBtn');if(!btn)return;
     btn.onclick=e=>{e.preventDefault();e.stopPropagation();toggleMenu()};btn.title=text('Kartenebenen','Map layers');btn.setAttribute('aria-label',btn.title);
+    const layerBtn=q('#aaLayerBtn');if(layerBtn)layerBtn.onclick=()=>setMapStyle((window.getAngelLogMapStyle?.()||'osm')==='osm'?'satellite':'osm');
     const map=window.aaMap;if(map&&!map.__angelLogDepthEvents){map.__angelLogDepthEvents=true;map.on('moveend zoomend',()=>refreshDepth())}
     document.addEventListener('click',e=>{if(menu&&!menu.classList.contains('hidden')&&!menu.contains(e.target)&&e.target!==btn)closeMenu()});
     const search=q('#aaSearch');search?.addEventListener('keydown',e=>{if(e.key==='Enter')closeMenu()});
+    if((window.getAngelLogMapStyle?.()||'osm')==='osm')setTimeout(applyOpenFree,20)
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,80),{once:true});else setTimeout(boot,80);
-  window.AngelLogMapLayers={refreshDepth,openMenu,closeMenu,get depthActive(){return depthActive}}
+  window.AngelLogMapLayers={refreshDepth,openMenu,closeMenu,applyOpenFree,get depthActive(){return depthActive}}
 })();
