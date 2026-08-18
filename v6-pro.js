@@ -69,7 +69,7 @@
   function openPro(){inject();showScreen('aaProScreen');$('.aa-bottomnav')?.classList.add('hidden');$('#aaPlus')?.classList.add('hidden');window.scrollTo({top:0,behavior:'instant'});loadEntitlement(true)}
   function closePro(){showScreen('aaMapScreen');$('.aa-bottomnav')?.classList.remove('hidden');$('#aaPlus')?.classList.remove('hidden')}
   function buyPreview(){if(isPro())return toast('AngelLog Pro ist bereits aktiv.');toast(`${money()} · Store-Kauf wird beim App-Release aktiviert.`)}
-  function loadProGates(){if(document.querySelector('script[src="/v6-pro-gates.js"]'))return;const s=document.createElement('script');s.src='/v6-pro-gates.js';s.defer=true;document.body.appendChild(s)}
+  function loadProGates(){if(document.querySelector('script[data-pro-gates="1"]'))return;const s=document.createElement('script');s.src='/v6-pro-gates.js?v=stable2';s.defer=true;s.dataset.proGates='1';document.body.appendChild(s)}
   window.openPro=openPro;window.angelLogIsPro=isPro;window.angelLogHasProAccess=hasProAccess;window.angelLogRequirePro=requirePro;window.angelLogRefreshPro=()=>loadEntitlement(true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{inject();loadEntitlement();loadProGates()});else{inject();loadEntitlement();loadProGates()}
   try{sb.auth.onAuthStateChange(()=>{entitlementLoaded=false;loadEntitlement(true)})}catch{}
