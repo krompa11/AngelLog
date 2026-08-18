@@ -2,6 +2,7 @@
   const q=s=>document.querySelector(s);
   const safe=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
   let token=0;
+  const REF_FIELDS='display_name,country,state,manager_type,association,association_url,access_network,access_category,network_water_code,guest_card_available,guest_card_url,guest_card_info,official_url,access_source_name,access_source_url,access_verified_at';
 
   function normalizeName(v){return String(v||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('de-DE')}
   function safeUrl(v){try{const u=new URL(String(v||''),location.origin);return /^https?:$/.test(u.protocol)?u.href:''}catch{return''}}
@@ -25,19 +26,34 @@
     panel.insertBefore(card,panel.firstChild);return card
   }
 
+  function chooseUnique(rows,w){
+    if(!rows?.length)return null;if(rows.length===1)return rows[0];
+    const state=normalizeName(w?.state);if(state){const same=rows.filter(x=>normalizeName(x.state)===state);if(same.length===1)return same[0]}
+    return null
+  }
+
   async function referenceFor(w){
-    const name=normalizeName(w?.name);if(!name)return null;
+    const raw=String(w?.name||'').trim(),name=normalizeName(raw),country=w?.country||'DE';if(!name)return null;
     try{
-      let query=sb.from('water_access_reference').select('display_name,country,state,manager_type,association,association_url,access_network,access_category,network_water_code,guest_card_available,guest_card_url,guest_card_info,official_url,access_source_name,access_source_url,access_verified_at').eq('normalized_name',name).eq('country',w?.country||'DE').limit(5);
-      const {data,error}=await query;if(error||!data?.length)return null;
-      if(data.length===1)return data[0];
-      const state=String(w?.state||'').trim().toLocaleLowerCase('de-DE');
-      if(state){const exact=data.find(x=>String(x.state||'').trim().toLocaleLowerCase('de-DE')===state);if(exact)return exact}
-      return null;
+      let r=await sb.from('water_access_reference').select(REF_FIELDS).eq('normalized_name',name).eq('country',country).limit(10);
+      if(!r.error){const exact=chooseUnique(r.data,w);if(exact)return exact}
+      if(raw.length<4)return null;
+      for(const pattern of [`${raw},%`,`${raw} %`]){
+        r=await sb.from('water_access_reference').select(REF_FIELDS).eq('country',country).ilike('display_name',pattern).limit(10);
+        if(!r.error){const candidate=chooseUnique(r.data,w);if(candidate)return candidate}
+      }
+      return null
     }catch{return null}
   }
 
-  async function resolveAccess(w){return hasAccessData(w)?w:(await referenceFor(w))}
+  async function resolveAccess(w){
+    const ref=await referenceFor(w);
+    if(!ref)return hasAccessData(w)?w:null;
+    const merged={...w,...ref};
+    if(w?.official_url)merged.official_url=w.official_url;
+    if(w?.association_url&&!ref.association_url)merged.association_url=w.association_url;
+    return merged
+  }
 
   function render(w,a){
     const card=ensureUi();if(!card)return;
