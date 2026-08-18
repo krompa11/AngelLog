@@ -1,6 +1,6 @@
 (()=>{
   const q=s=>document.querySelector(s),prefs=()=>window.getAngelLogPreferences?.()||{};
-  let applying=false,pro=false,selectedLocation=null,pickerMap=null,pickerMarker=null,pickerLayer=null;
+  let applying=false,pro=false,selectedLocation=null,pickerMap=null,pickerMarker=null,pickerLayer=null,pickerBase='satellite';
 
   const SPECIES=[
     'Aal','Äsche','Aland','Bachforelle','Bachsaibling','Barbe','Bitterling','Brasse','Döbel','Elritze','Flussbarsch','Giebel','Graskarpfen','Gründling','Güster','Hasel','Hecht','Huchen','Karausche','Karpfen','Kaulbarsch','Lachs','Maifisch','Maräne','Meerforelle','Nase','Quappe','Rapfen','Regenbogenforelle','Rotauge','Rotfeder','Schleie','Schneider','Seeforelle','Seesaibling','Silberkarpfen','Marmorkarpfen','Stint','Wels','Zander','Zährte','Zobel','Zope','Zwergwels','Sonnenbarsch','Stör','Sterlet','Sibirischer Stör','Beluga-Stör','Schwarzmundgrundel','Kesslergrundel','Marmorgrundel','Blaubandbärbling','Goldfisch',
@@ -35,12 +35,13 @@
     if(q('#aaCatchLocationPicker'))return;
     const overlay=document.createElement('div');overlay.id='aaCatchLocationPicker';overlay.style.cssText='display:none;position:fixed;inset:0;z-index:5000;background:rgba(8,9,10,.82);align-items:center;justify-content:center;padding:0';
     overlay.innerHTML=`<div style="width:min(540px,100vw);height:min(760px,100vh);background:#202122;display:flex;flex-direction:column;box-shadow:0 20px 70px rgba(0,0,0,.55)">
-      <div style="display:flex;align-items:center;gap:10px;padding:14px 14px 10px;border-bottom:1px solid #414243"><button id="aaCatchPickerClose" type="button" style="border:0;background:#343536;color:#fff;border-radius:7px;padding:9px 12px">×</button><div style="flex:1"><b style="color:#fff">📍 Genauen Fangort markieren</b><small style="display:block;color:#999;margin-top:2px">Tippe auf die Karte oder verschiebe den Marker.</small></div></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 12px 9px;border-bottom:1px solid #414243"><button id="aaCatchPickerClose" type="button" style="border:0;background:#343536;color:#fff;border-radius:7px;padding:9px 12px">×</button><div style="flex:1"><b style="color:#fff">📍 Genauen Fangort markieren</b><small style="display:block;color:#999;margin-top:2px">Tippe auf die Karte oder verschiebe den Marker.</small></div><div style="display:flex;gap:5px"><button id="aaCatchPickerMapBase" type="button" style="border:1px solid #555;background:#343536;color:#fff;border-radius:7px;padding:8px 9px;font-size:11px">Karte</button><button id="aaCatchPickerSatBase" type="button" style="border:1px solid #61d000;background:#31511c;color:#fff;border-radius:7px;padding:8px 9px;font-size:11px">Satellit</button></div></div>
       <div id="aaCatchPickerMap" style="flex:1;min-height:390px;background:#151617"></div>
       <div style="padding:12px;border-top:1px solid #414243;background:#252627"><div id="aaCatchPickerCoords" style="font-size:12px;color:#aaa;margin-bottom:10px">Noch kein Punkt gewählt.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button id="aaCatchPickerGps" type="button" style="border:1px solid #555;background:#343536;color:#fff;border-radius:8px;padding:11px">⌖ Meine Position</button><button id="aaCatchPickerSave" type="button" style="border:0;background:#61d000;color:#fff;border-radius:8px;padding:11px;font-weight:800">Punkt übernehmen</button></div></div>
     </div>`;
     document.body.appendChild(overlay);
     q('#aaCatchPickerClose').onclick=closePicker;
+    q('#aaCatchPickerMapBase').onclick=()=>setPickerBase('map');q('#aaCatchPickerSatBase').onclick=()=>setPickerBase('satellite');
     q('#aaCatchPickerGps').onclick=async()=>{const b=q('#aaCatchPickerGps'),old=b.textContent;b.disabled=true;b.textContent='Standort wird gesucht …';try{const p=await currentGps();setPickerPoint(p.latitude,p.longitude,p.accuracy,true)}catch(e){toast(e.message||'Standort nicht verfügbar.')}finally{b.disabled=false;b.textContent=old}};
     q('#aaCatchPickerSave').onclick=()=>{if(!pickerMarker)return toast('Bitte zuerst einen Punkt auf der Karte markieren.');const p=pickerMarker.getLatLng();selectedLocation={latitude:p.lat,longitude:p.lng,accuracy:null,source:'manual'};updateLocationSummary();const cb=q('#aaShareCatchLocation');if(cb)cb.checked=true;closePicker()};
   }
@@ -50,10 +51,16 @@
     try{const c=window.aaMap?.getCenter?.();if(c)return [c.lat,c.lng]}catch{}
     return [52.52,13.405]
   }
+  function setPickerBase(type){
+    pickerBase=type==='map'?'map':'satellite';if(!pickerMap)return;
+    if(pickerLayer)try{pickerMap.removeLayer(pickerLayer)}catch{}
+    if(pickerBase==='satellite')pickerLayer=L.tileLayer(window.satelliteUrl?.()||'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(pickerMap);
+    else pickerLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(pickerMap);
+    const mapBtn=q('#aaCatchPickerMapBase'),satBtn=q('#aaCatchPickerSatBase');if(mapBtn){mapBtn.style.borderColor=pickerBase==='map'?'#61d000':'#555';mapBtn.style.background=pickerBase==='map'?'#31511c':'#343536'}if(satBtn){satBtn.style.borderColor=pickerBase==='satellite'?'#61d000':'#555';satBtn.style.background=pickerBase==='satellite'?'#31511c':'#343536'}
+  }
   function initPickerMap(){
     ensurePickerUi();if(pickerMap)return;
-    const center=pickerCenter();pickerMap=L.map('aaCatchPickerMap',{zoomControl:true,attributionControl:true}).setView(center,15);
-    pickerLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(pickerMap);
+    const center=pickerCenter();pickerMap=L.map('aaCatchPickerMap',{zoomControl:true,attributionControl:true}).setView(center,15);setPickerBase(pickerBase);
     pickerMap.on('click',e=>setPickerPoint(e.latlng.lat,e.latlng.lng,null,false));
   }
   function setPickerPoint(lat,lng,accuracy=null,pan=false){
