@@ -161,5 +161,6 @@
   }
   loadFeature('/v6-user-moderation.js',450);
   loadFeature('/v6-notifications-appeals.js',650);
-  loadFeature('/v6-settings.js',850)
+  loadFeature('/v6-settings.js',850);
+  loadFeature('/v6-map-layers.js',980)
 })();
