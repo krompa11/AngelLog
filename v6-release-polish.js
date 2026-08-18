@@ -1,5 +1,5 @@
 (()=>{
-  const q=s=>document.querySelector(s),safe=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[m]));
+  const q=s=>document.querySelector(s),safe=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
   let waterToken=0;
   const blocked=id=>!!window.AngelLogSafety?.isBlocked?.(id);
   function cleanLabels(){
