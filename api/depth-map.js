@@ -21,9 +21,9 @@ export default async function handler(req,res){
     if(action&&action.startsWith('/'))action=APW.replace(/\/$/,'')+action;
     if(!action||!action.includes('webmap.ashx'))return res.status(502).json({error:'Tiefenkarten-Sitzung konnte nicht gestartet werden'});
     const cookie=page.headers.get('set-cookie')||'';
-    const sw=utm33(s,w),ne=utm33(n,e);
+    const corners=[utm33(s,w),utm33(s,e),utm33(n,w),utm33(n,e)],xs=corners.map(p=>p.x),ys=corners.map(p=>p.y);
     const layer={layerName:'L557',isVisible:true,sortHint:'G5',filter:null,supportsLegendBasedFilter:false,i7TypeName:'PostgresLayer'};
-    const prepare={extent:{xMin:Math.min(sw.x,ne.x),yMin:Math.min(sw.y,ne.y),xMax:Math.max(sw.x,ne.x),yMax:Math.max(sw.y,ne.y),epsg:25833},mapSize:{width,height},layerList:[layer],imageType:2,minScale:-1,maxScale:-1,virtualMapSize:null};
+    const prepare={extent:{xMin:Math.min(...xs),yMin:Math.min(...ys),xMax:Math.max(...xs),yMax:Math.max(...ys),epsg:25833},mapSize:{width,height},layerList:[layer],imageType:2,minScale:-1,maxScale:-1,virtualMapSize:null};
     const prep=await fetch(action,{method:'POST',headers:{'content-type':'text/plain','user-agent':'AngelLog/1.0',...(cookie?{cookie}:{})},body:JSON.stringify([command(1,prepare)])});
     const txt=await prep.text();let data;try{data=JSON.parse(txt)}catch{return res.status(502).json({error:'Ungültige Antwort der Tiefenkarte',detail:txt.slice(0,400)})}
     const out=Array.isArray(data)?data[data.length-1]:data,info=out?.value??out;
