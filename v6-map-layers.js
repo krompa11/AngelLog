@@ -2,7 +2,7 @@
   let depthLayer=null,depthActive=false,refreshTimer=null,menu=null,statusEl=null,attributionAdded=false;
   let openFreeLayer=null,openFreeReady=null,openFreeAttribution=false;
   const BB={s:51.15,n:53.75,w:11.0,e:15.2};
-  const OPENFREE_STYLE='https://tiles.openfreemap.org/styles/dark';
+  const OPENFREE_STYLE='https://tiles.openfreemap.org/styles/liberty';
   const MAPLIBRE_CSS='https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css';
   const MAPLIBRE_JS='https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js';
   const MAPLIBRE_LEAFLET='https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js';
@@ -21,7 +21,7 @@
       .aa-map-layer-option:first-of-type{border-top:0}.aa-map-layer-option .ico{font-size:23px;color:#61d000;text-align:center}.aa-map-layer-option b{display:block;font-size:16px}.aa-map-layer-option small{display:block;color:#8f9091;font-size:11px;margin-top:2px;line-height:1.25}.aa-map-layer-option .check{color:#61d000;font-size:20px;text-align:right}
       .aa-map-depth-status{border-top:1px solid #444;margin-top:5px;padding:9px 10px 5px;color:#949596;font-size:11px;line-height:1.35}.aa-map-depth-status.ok{color:#78d72b}.aa-map-depth-status.warn{color:#e2b548}
       #aaSearchBtn.aa-layer-menu-active{box-shadow:0 0 0 3px rgba(97,208,0,.25),0 8px 25px rgba(0,0,0,.3)}
-      .leaflet-control-attribution{background:rgba(22,23,24,.78)!important;color:#8d8e90!important;font-size:8px!important;line-height:1.15!important;padding:2px 4px!important;max-width:78%;white-space:normal;text-align:right;border-radius:4px 0 0 0}.leaflet-control-attribution a{color:#b5b6b7!important}.maplibregl-ctrl-attrib{display:none!important}
+      .leaflet-control-attribution{background:rgba(250,250,250,.88)!important;color:#68696b!important;font-size:8px!important;line-height:1.15!important;padding:2px 4px!important;max-width:78%;white-space:normal;text-align:right;border-radius:4px 0 0 0}.leaflet-control-attribution a{color:#4d626e!important}.maplibregl-ctrl-attrib{display:none!important}
     `;document.head.appendChild(s)
   }
 
@@ -30,7 +30,7 @@
     const host=q('.aa-map-screen');if(!host)return null;
     menu=document.createElement('div');menu.id='aaMapLayerMenu';menu.className='aa-map-layer-menu hidden';
     menu.innerHTML=`<div class="aa-map-layer-title">${text('Kartenebenen','Map layers')}</div>
-      <button class="aa-map-layer-option" data-map-layer="osm"><span class="ico">▦</span><span><b>${text('Standardkarte','Standard map')}</b><small>OpenFreeMap Dark · OpenStreetMap</small></span><span class="check"></span></button>
+      <button class="aa-map-layer-option" data-map-layer="osm"><span class="ico">▦</span><span><b>${text('Standardkarte','Standard map')}</b><small>OpenFreeMap · OpenStreetMap</small></span><span class="check"></span></button>
       <button class="aa-map-layer-option" data-map-layer="satellite"><span class="ico">▱</span><span><b>${text('Satellit','Satellite')}</b><small>Esri World Imagery</small></span><span class="check"></span></button>
       <button class="aa-map-layer-option" data-map-layer="depth"><span class="ico">≋</span><span><b>${text('Tiefenkarte','Depth map')}</b><small>${text('Amtliche Seenvermessung Brandenburg','Official Brandenburg lake survey')}</small></span><span class="check"></span></button>
       <div id="aaMapDepthStatus" class="aa-map-depth-status">${text('Tiefenkarte derzeit für Brandenburg.','Depth map currently available for Brandenburg.')}</div>`;
