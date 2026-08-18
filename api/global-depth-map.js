@@ -11,7 +11,7 @@ export default async function handler(req,res){
     const p=new URLSearchParams({
       service:'WMS',request:'GetMap',version:'1.3.0',layers:'gebco_2026_2',styles:'',
       crs:'EPSG:4326',bbox:`${s},${w},${n},${e}`,width:String(width),height:String(height),
-      format:'image/png',transparent:'false'
+      format:'image/png',transparent:'true'
     });
     const r=await fetch(`${GEBCO}?${p.toString()}`,{headers:{'user-agent':'AngelLog/1.0 (+https://angellogmobileready-3.vercel.app)'}});
     if(!r.ok)return res.status(502).json({error:'Globale Tiefenkarte nicht erreichbar',status:r.status});
