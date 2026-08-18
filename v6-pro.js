@@ -14,7 +14,7 @@
     ['Erweiterte Gewässersuche mit Filtern',0],
     ['Pro-Benachrichtigungen für Lieblingsgewässer',0]
   ];
-  let selectedPlan='yearly',entitlement={tier:'free',status:'inactive'};
+  let selectedPlan='yearly',entitlement={tier:'free',status:'inactive'},entitlementLoaded=false,entitlementPromise=null;
   const $=s=>document.querySelector(s);
   function money(){return selectedPlan==='yearly'?'34,99 €':'4,99 €'}
   function inject(){
@@ -45,18 +45,31 @@
     document.querySelectorAll('[data-open-pro]').forEach(b=>b.onclick=openPro);
   }
   function selectPlan(p){selectedPlan=p;$('#proMonthly')?.classList.toggle('active',p==='monthly');$('#proYearly')?.classList.toggle('active',p==='yearly');if($('#proBuy'))$('#proBuy').textContent=p==='yearly'?'Jahresabo auswählen':'Monatsabo auswählen'}
-  async function loadEntitlement(){
-    try{
-      const {data:{session}}=await sb.auth.getSession();if(!session?.user)return setStatus();
-      const {data}=await sb.from('subscription_entitlements').select('tier,plan,status,current_period_end').eq('user_id',session.user.id).maybeSingle();
-      if(data)entitlement=data;setStatus();
-    }catch{setStatus()}
+  function isPro(){return entitlement.tier==='pro'&&['active','trialing','grace_period'].includes(entitlement.status)&&(!entitlement.current_period_end||new Date(entitlement.current_period_end).getTime()>Date.now())}
+  function emitEntitlement(){try{window.dispatchEvent(new CustomEvent('angelLog:entitlement',{detail:{...entitlement,isPro:isPro()}}))}catch{}}
+  function setStatus(){const p=$('#proStatus');if(p){p.textContent=isPro()?'PRO AKTIV':'FREE';p.classList.toggle('on',isPro());if($('#proBuy'))$('#proBuy').textContent=isPro()?'Pro ist auf diesem Konto aktiv':(selectedPlan==='yearly'?'Jahresabo auswählen':'Monatsabo auswählen')}emitEntitlement()}
+  async function loadEntitlement(force=false){
+    if(entitlementPromise&&!force)return entitlementPromise;
+    entitlementPromise=(async()=>{
+      try{
+        const {data:{session}}=await sb.auth.getSession();
+        if(!session?.user){entitlement={tier:'free',status:'inactive'};entitlementLoaded=true;setStatus();return entitlement}
+        const {data}=await sb.from('subscription_entitlements').select('tier,plan,status,current_period_end').eq('user_id',session.user.id).maybeSingle();
+        entitlement=data||{tier:'free',status:'inactive'};
+      }catch{entitlement={tier:'free',status:'inactive'}}
+      entitlementLoaded=true;setStatus();return entitlement
+    })();
+    try{return await entitlementPromise}finally{entitlementPromise=null}
   }
-  function isPro(){return entitlement.tier==='pro'&&['active','trialing','grace_period'].includes(entitlement.status)}
-  function setStatus(){const p=$('#proStatus');if(!p)return;p.textContent=isPro()?'PRO AKTIV':'FREE';p.classList.toggle('on',isPro());if(isPro()&&$('#proBuy'))$('#proBuy').textContent='Pro ist auf diesem Konto aktiv'}
-  function openPro(){inject();showScreen('aaProScreen');$('.aa-bottomnav')?.classList.add('hidden');$('#aaPlus')?.classList.add('hidden');window.scrollTo({top:0,behavior:'instant'});loadEntitlement()}
+  async function hasProAccess(){if(!entitlementLoaded)await loadEntitlement();return isPro()}
+  async function requirePro(feature='Diese Funktion'){
+    if(await hasProAccess())return true;
+    toast(`${feature} ist nur mit AngelLog Pro verfügbar.`);openPro();return false
+  }
+  function openPro(){inject();showScreen('aaProScreen');$('.aa-bottomnav')?.classList.add('hidden');$('#aaPlus')?.classList.add('hidden');window.scrollTo({top:0,behavior:'instant'});loadEntitlement(true)}
   function closePro(){showScreen('aaMapScreen');$('.aa-bottomnav')?.classList.remove('hidden');$('#aaPlus')?.classList.remove('hidden')}
   function buyPreview(){if(isPro())return toast('AngelLog Pro ist bereits aktiv.');toast(`${money()} · Store-Kauf wird beim App-Release aktiviert.`)}
-  window.openPro=openPro;window.angelLogIsPro=isPro;
+  window.openPro=openPro;window.angelLogIsPro=isPro;window.angelLogHasProAccess=hasProAccess;window.angelLogRequirePro=requirePro;window.angelLogRefreshPro=()=>loadEntitlement(true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{inject();loadEntitlement()});else{inject();loadEntitlement()}
+  try{sb.auth.onAuthStateChange(()=>{entitlementLoaded=false;loadEntitlement(true)})}catch{}
 })();
