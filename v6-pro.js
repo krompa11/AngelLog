@@ -14,7 +14,7 @@
     ['Erweiterte Gewässersuche mit Filtern',0],
     ['Pro-Benachrichtigungen für Lieblingsgewässer',0]
   ];
-  let selectedPlan='yearly',entitlement={tier:'free',status:'inactive',admin:false},entitlementLoaded=false,entitlementPromise=null;
+  let selectedPlan='yearly',entitlement={tier:'free',status:'inactive',admin:false,serverAccess:false},entitlementLoaded=false,entitlementPromise=null;
   const $=s=>document.querySelector(s);
   function money(){return selectedPlan==='yearly'?'34,99 €':'4,99 €'}
   function inject(){
@@ -45,7 +45,7 @@
     document.querySelectorAll('[data-open-pro]').forEach(b=>b.onclick=openPro);
   }
   function selectPlan(p){selectedPlan=p;$('#proMonthly')?.classList.toggle('active',p==='monthly');$('#proYearly')?.classList.toggle('active',p==='yearly');if($('#proBuy'))$('#proBuy').textContent=p==='yearly'?'Jahresabo auswählen':'Monatsabo auswählen'}
-  function isPro(){return entitlement.admin===true||(entitlement.tier==='pro'&&['active','trialing','grace_period'].includes(entitlement.status)&&(!entitlement.current_period_end||new Date(entitlement.current_period_end).getTime()>Date.now()))}
+  function isPro(){return entitlement.serverAccess===true||entitlement.admin===true||(entitlement.tier==='pro'&&['active','trialing','grace_period'].includes(entitlement.status)&&(!entitlement.current_period_end||new Date(entitlement.current_period_end).getTime()>Date.now()))}
   function emitEntitlement(){try{window.dispatchEvent(new CustomEvent('angelLog:entitlement',{detail:{...entitlement,isPro:isPro()}}))}catch{}}
   function setStatus(){const p=$('#proStatus');if(p){p.textContent=entitlement.admin?'ADMIN · PRO':(isPro()?'PRO AKTIV':'FREE');p.classList.toggle('on',isPro());if($('#proBuy'))$('#proBuy').textContent=entitlement.admin?'Admin: alle Pro-Funktionen aktiv':(isPro()?'Pro ist auf diesem Konto aktiv':(selectedPlan==='yearly'?'Jahresabo auswählen':'Monatsabo auswählen'))}emitEntitlement()}
   async function loadEntitlement(force=false){
@@ -53,15 +53,17 @@
     entitlementPromise=(async()=>{
       try{
         const {data:{session}}=await sb.auth.getSession();
-        if(!session?.user){entitlement={tier:'free',status:'inactive',admin:false};entitlementLoaded=true;setStatus();return entitlement}
-        const [adminRes,subRes]=await Promise.all([
+        if(!session?.user){entitlement={tier:'free',status:'inactive',admin:false,serverAccess:false};entitlementLoaded=true;setStatus();return entitlement}
+        const [accessRes,adminRes,subRes]=await Promise.all([
+          sb.rpc('has_active_pro'),
           sb.rpc('is_admin'),
-          sb.from('subscription_entitlements').select('tier,plan,status,current_period_end').eq('user_id',session.user.id).maybeSingle()
+          sb.from('subscription_entitlements').select('tier,plan,status,current_period_end,provider,product_id').eq('user_id',session.user.id).maybeSingle()
         ]);
-        const admin=adminRes.data===true;
-        if(admin)entitlement={...(subRes.data||{}),tier:'pro',plan:'admin',status:'active',current_period_end:null,admin:true};
-        else entitlement={...(subRes.data||{tier:'free',status:'inactive'}),admin:false};
-      }catch{entitlement={tier:'free',status:'inactive',admin:false}}
+        const serverAccess=accessRes.data===true,admin=adminRes.data===true,sub=subRes.data||null;
+        if(admin)entitlement={...(sub||{}),tier:'pro',plan:sub?.plan||'yearly',status:'active',current_period_end:null,admin:true,serverAccess:true};
+        else if(serverAccess)entitlement={...(sub||{}),tier:'pro',status:sub?.status||'active',admin:false,serverAccess:true};
+        else entitlement={...(sub||{tier:'free',status:'inactive'}),admin:false,serverAccess:false};
+      }catch{entitlement={tier:'free',status:'inactive',admin:false,serverAccess:false}}
       entitlementLoaded=true;setStatus();return entitlement
     })();
     try{return await entitlementPromise}finally{entitlementPromise=null}
@@ -74,7 +76,7 @@
   function openPro(){inject();showScreen('aaProScreen');$('.aa-bottomnav')?.classList.add('hidden');$('#aaPlus')?.classList.add('hidden');window.scrollTo({top:0,behavior:'instant'});loadEntitlement(true)}
   function closePro(){showScreen('aaMapScreen');$('.aa-bottomnav')?.classList.remove('hidden');$('#aaPlus')?.classList.remove('hidden')}
   function buyPreview(){if(entitlement.admin)return toast('Admin-Konto: alle Pro-Funktionen sind freigeschaltet.');if(isPro())return toast('AngelLog Pro ist bereits aktiv.');toast(`${money()} · Store-Kauf wird beim App-Release aktiviert.`)}
-  function loadProGates(){if(document.querySelector('script[data-pro-gates="1"]'))return;const s=document.createElement('script');s.src='/v6-pro-gates.js?v=stable2';s.defer=true;s.dataset.proGates='1';document.body.appendChild(s)}
+  function loadProGates(){if(document.querySelector('script[data-pro-gates="1"]'))return;const s=document.createElement('script');s.src='/v6-pro-gates.js?v=admin4';s.defer=true;s.dataset.proGates='1';document.body.appendChild(s)}
   window.openPro=openPro;window.angelLogIsPro=isPro;window.angelLogHasProAccess=hasProAccess;window.angelLogRequirePro=requirePro;window.angelLogRefreshPro=()=>loadEntitlement(true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{inject();loadEntitlement();loadProGates()});else{inject();loadEntitlement();loadProGates()}
   try{sb.auth.onAuthStateChange(()=>{entitlementLoaded=false;loadEntitlement(true)})}catch{}
