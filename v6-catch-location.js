@@ -3,15 +3,20 @@
   let applying=false,pro=false,selectedLocation=null,pickerMap=null,pickerMarker=null,pickerLayer=null;
 
   const SPECIES=[
-    'Aal','Äsche','Aland','Bachforelle','Bachsaibling','Barbe','Bitterling','Brasse','Döbel','Elritze','Flussbarsch','Giebel','Gründling','Güster','Hasel','Hecht','Huchen','Karausche','Karpfen','Kaulbarsch','Lachs','Maifisch','Maräne','Meerforelle','Nase','Quappe','Rapfen','Regenbogenforelle','Rotauge','Rotfeder','Schleie','Schneider','Seeforelle','Seesaibling','Stint','Wels','Zander','Zährte','Zope','Zwergwels','Sonnenbarsch','Stör',
-    'Dorsch / Kabeljau','Köhler / Seelachs','Pollack','Makrele','Hering','Hornhecht','Flunder','Scholle','Kliesche','Steinbutt','Heilbutt','Wolfsbarsch','Meeräsche','Goldbrasse / Dorade','Rotbarsch','Leng','Lumb','Seehecht','Schellfisch','Wittling','Sardine','Sardelle','Conger','Petermännchen','Seeteufel','Bonito','Blauflossen-Thunfisch','Gelbflossen-Thunfisch','Schwertfisch','Mahi-Mahi','Barrakuda',
-    'Forellenbarsch (Largemouth Bass)','Smallmouth Bass','Striped Bass','Bluefish','Redfish / Red Drum','Snook','Tarpon','Bonefish','Permit','Grouper','Snapper','Channel Catfish','Flathead Catfish','Blue Catfish','Muskellunge','Walleye','Northern Pike','Crappie','Bluegill','Peacock Bass','Golden Dorado','Arapaima'
+    'Aal','Äsche','Aland','Bachforelle','Bachsaibling','Barbe','Bitterling','Brasse','Döbel','Elritze','Flussbarsch','Giebel','Graskarpfen','Gründling','Güster','Hasel','Hecht','Huchen','Karausche','Karpfen','Kaulbarsch','Lachs','Maifisch','Maräne','Meerforelle','Nase','Quappe','Rapfen','Regenbogenforelle','Rotauge','Rotfeder','Schleie','Schneider','Seeforelle','Seesaibling','Silberkarpfen','Marmorkarpfen','Stint','Wels','Zander','Zährte','Zobel','Zope','Zwergwels','Sonnenbarsch','Stör','Sterlet','Sibirischer Stör','Beluga-Stör','Schwarzmundgrundel','Kesslergrundel','Marmorgrundel','Blaubandbärbling','Goldfisch',
+    'Dorsch / Kabeljau','Köhler / Seelachs','Pollack','Makrele','Hering','Hornhecht','Flunder','Scholle','Kliesche','Steinbutt','Heilbutt','Wolfsbarsch','Meeräsche','Goldbrasse / Dorade','Rotbarsch','Leng','Lumb','Seehecht','Schellfisch','Wittling','Sardine','Sardelle','Conger','Petermännchen','Seeteufel','Bonito','Blauflossen-Thunfisch','Gelbflossen-Thunfisch','Weißer Thun / Albacore','Großaugen-Thunfisch','Schwertfisch','Mahi-Mahi','Barrakuda','Wahoo','Cobia','Bernsteinmakrele / Amberjack','Königsmakrele','Spanische Makrele','Blauer Marlin','Weißer Marlin','Segelfisch','Giant Trevally','Roosterfish','Red Snapper','Yellowtail Snapper','Cubera Snapper','Grouper',
+    'Forellenbarsch (Largemouth Bass)','Smallmouth Bass','Striped Bass','White Bass','Bluefish','Redfish / Red Drum','Black Drum','Snook','Tarpon','Bonefish','Permit','Channel Catfish','Flathead Catfish','Blue Catfish','Muskellunge','Walleye','Northern Pike','Yellow Perch','Black Crappie','White Crappie','Bluegill','Alligator Gar','Spotted Gar','Bowfin','Lake Trout','Steelhead','Chinook Salmon','Coho Salmon',
+    'Peacock Bass','Golden Dorado','Arapaima','Payara','Pacu','Tambaqui','Goliath Tigerfish','Nilbarsch','Barramundi','Mangrove Jack','Giant Snakehead','Snakehead','Mahseer'
   ];
+  const SPECIES_ALIASES={
+    'barsch':'Flussbarsch','flussbarsch':'Flussbarsch','brachse':'Brasse','blei':'Brasse','waller':'Wels','wels':'Wels','aalquappe':'Quappe','rutte':'Quappe','quappe':'Quappe','renke':'Maräne','felchen':'Maräne','maräne':'Maräne','dorsch':'Dorsch / Kabeljau','kabeljau':'Dorsch / Kabeljau','seelachs':'Köhler / Seelachs','köhler':'Köhler / Seelachs','dorade':'Goldbrasse / Dorade','goldbrasse':'Goldbrasse / Dorade','forellenbarsch':'Forellenbarsch (Largemouth Bass)','largemouth bass':'Forellenbarsch (Largemouth Bass)','schwarzbarsch':'Forellenbarsch (Largemouth Bass)','hecht':'Hecht','zander':'Zander','karpfen':'Karpfen','aal':'Aal','schleie':'Schleie','rapfen':'Rapfen'
+  };
   const METHODS=['Spinning','Grund','Pose','Vertikal','Fliege','Köderfisch','Feedern','Jiggen','Dropshot','Brandungsangeln','Pilken','Bootsangeln','Schleppen','Sonstiges'];
 
   async function getPro(){for(let i=0;i<20&&!window.angelLogHasProAccess;i++)await new Promise(r=>setTimeout(r,100));try{return !!(await window.angelLogHasProAccess?.())}catch{return false}}
   function isPublic(){return (q('#aaCatchVisibility')?.value||prefs().default_catch_visibility||'public')==='public'}
   function fmtCoord(v){return Number(v).toFixed(5)}
+  function normalizeSpecies(value){const raw=String(value||'').trim();if(!raw)return'';return SPECIES_ALIASES[raw.toLocaleLowerCase('de-DE')]||raw}
 
   function ensureSpeciesUi(){
     const input=q('#aaSpecies');if(!input)return;
@@ -100,7 +105,7 @@
   function currentGps(){return new Promise((resolve,reject)=>{if(!navigator.geolocation)return reject(new Error('Standortzugriff wird von diesem Gerät nicht unterstützt.'));navigator.geolocation.getCurrentPosition(p=>resolve({latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy}),e=>reject(new Error(e?.message||'Standort konnte nicht bestimmt werden.')),{enableHighAccuracy:true,timeout:10000,maximumAge:30000})})}
 
   async function saveCatchWithLocation(){
-    if(applying)return;const user=window.aaUser;if(!user)return toast('Bitte zuerst anmelden.');const species=q('#aaSpecies')?.value.trim();if(!species)return toast('Fischart fehlt.');
+    if(applying)return;const user=window.aaUser;if(!user)return toast('Bitte zuerst anmelden.');const species=normalizeSpecies(q('#aaSpecies')?.value);if(!species)return toast('Fischart fehlt.');
     const length=+q('#aaLength')?.value||null,weight=+q('#aaWeight')?.value||null,bait=q('#aaBait')?.value.trim()||null,method=q('#aaMethod')?.value||null,pref=prefs(),visibility=q('#aaCatchVisibility')?.value||pref.default_catch_visibility||'public',waterId=window.aaCurrentWater?.id||null,waterName=window.aaCurrentWater?.name||null,file=q('#aaCatchPhoto')?.files?.[0]||null;
     let wantsLocation=visibility==='public'&&!!q('#aaShareCatchLocation')?.checked;if(wantsLocation&&!pro){if(!(await window.angelLogRequirePro?.('Fangorte auf der Karte')))return;pro=await getPro();if(!pro)return}
     const btn=q('#aaSaveCatch'),old=btn?.textContent||'Fang speichern';if(btn){btn.disabled=true;btn.textContent=file?'Foto wird hochgeladen …':'Fang wird gespeichert …'}
