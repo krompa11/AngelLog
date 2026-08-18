@@ -1,9 +1,10 @@
 (()=>{
   let globalDepthLayer=null,globathyDepthLayer=null,officialDepthLayer=null,depthActive=false,refreshTimer=null,menu=null,statusEl=null;
   let globalDepthAttribution=false,globathyDepthAttribution=false,officialDepthAttribution=false,openFreeLayer=null,openFreeReady=null,openFreeAttribution=false;
-  let geoTiffReady=null,lakeDepthToken=0,lastLakeKey='';
+  let geoTiffReady=null,lakeDepthToken=0,officialDepthToken=0,lastLakeKey='',officialObjectUrl=null;
   const lakeLookupCache=new Map(),lakeRasterCache=new Map();
   const BB={s:51.15,n:53.75,w:11.0,e:15.2};
+  const GEBCO_MAX_ZOOM=8,OFFICIAL_MIN_ZOOM=11,GLOBATHY_MIN_ZOOM=12;
   const OPENFREE_STYLE='https://tiles.openfreemap.org/styles/liberty';
   const MAPLIBRE_CSS='https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css';
   const MAPLIBRE_JS='https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js';
@@ -29,7 +30,7 @@
       <button class="aa-map-layer-option" data-map-layer="osm"><span class="ico">▦</span><span><b>${text('Standardkarte','Standard map')}</b><small>OpenFreeMap · OpenStreetMap</small></span><span class="check"></span></button>
       <button class="aa-map-layer-option" data-map-layer="satellite"><span class="ico">▱</span><span><b>${text('Satellit','Satellite')}</b><small>Esri World Imagery</small></span><span class="check"></span></button>
       <button class="aa-map-layer-option" data-map-layer="depth"><span class="ico">≋</span><span><b>${text('Tiefenkarte weltweit','Worldwide depth map')}</b><small>GEBCO · GLOBathy · ${text('amtliche Daten wo verfügbar','official data where available')}</small></span><span class="check"></span></button>
-      <div id="aaMapDepthStatus" class="aa-map-depth-status">${text('Meer weltweit; Seetiefen werden beim Hineinzoomen geladen. GLOBathy-Werte sind modelliert.','Worldwide ocean depth; lake depth loads when zooming in. GLOBathy values are modelled.')}</div>`;
+      <div id="aaMapDepthStatus" class="aa-map-depth-status">${text('Meer weltweit; Seetiefen beim Hineinzoomen. Amtliche Daten haben Vorrang vor Modellen.','Worldwide ocean depth; lake depth when zooming in. Official surveys take priority over models.')}</div>`;
     host.appendChild(menu);statusEl=q('#aaMapDepthStatus');menu.querySelectorAll('[data-map-layer]').forEach(b=>b.addEventListener('click',()=>selectLayer(b.dataset.mapLayer)));updateChecks();return menu
   }
   function loadCss(href){if(document.querySelector(`link[href="${href}"]`))return;const l=document.createElement('link');l.rel='stylesheet';l.href=href;document.head.appendChild(l)}
@@ -46,11 +47,13 @@
   function updateChecks(){if(!menu)return;const base=window.getAngelLogMapStyle?.()||'osm';menu.querySelectorAll('[data-map-layer]').forEach(b=>{const v=b.dataset.mapLayer,on=v==='depth'?depthActive:(!depthActive&&v===base);const c=b.querySelector('.check');if(c)c.textContent=on?'✓':''})}
   function setStatus(msg,type=''){if(!statusEl)return;statusEl.textContent=msg;statusEl.className='aa-map-depth-status'+(type?' '+type:'')}
   function addDepthAttribution(type){const map=window.aaMap;if(!map)return;if(type==='global'&&!globalDepthAttribution){try{map.attributionControl?.addAttribution('Bathymetrie © GEBCO Compilation Group 2026');globalDepthAttribution=true}catch{}}if(type==='globathy'&&!globathyDepthAttribution){try{map.attributionControl?.addAttribution('Seetiefen © GLOBathy · CC0 · modelliert');globathyDepthAttribution=true}catch{}}if(type==='official'&&!officialDepthAttribution){try{map.attributionControl?.addAttribution('Tiefendaten © LfU Brandenburg');officialDepthAttribution=true}catch{}}}
-  function removeDepthAttributions(){const map=window.aaMap;if(map){if(globalDepthAttribution)try{map.attributionControl?.removeAttribution('Bathymetrie © GEBCO Compilation Group 2026')}catch{}if(globathyDepthAttribution)try{map.attributionControl?.removeAttribution('Seetiefen © GLOBathy · CC0 · modelliert')}catch{}if(officialDepthAttribution)try{map.attributionControl?.removeAttribution('Tiefendaten © LfU Brandenburg')}catch{}}globalDepthAttribution=false;globathyDepthAttribution=false;officialDepthAttribution=false}
   function removeLayer(layer){const map=window.aaMap;if(layer&&map)try{map.removeLayer(layer)}catch{}}
+  function clearGlobalDepth(){removeLayer(globalDepthLayer);globalDepthLayer=null;if(globalDepthAttribution){try{window.aaMap?.attributionControl?.removeAttribution('Bathymetrie © GEBCO Compilation Group 2026')}catch{}globalDepthAttribution=false}}
   function clearGlobathy(){removeLayer(globathyDepthLayer);globathyDepthLayer=null;lastLakeKey='';lakeDepthToken++;if(globathyDepthAttribution){try{window.aaMap?.attributionControl?.removeAttribution('Seetiefen © GLOBathy · CC0 · modelliert')}catch{}globathyDepthAttribution=false}}
-  function clearDepth(){removeLayer(globalDepthLayer);removeLayer(globathyDepthLayer);removeLayer(officialDepthLayer);globalDepthLayer=null;globathyDepthLayer=null;officialDepthLayer=null;lastLakeKey='';lakeDepthToken++;clearTimeout(refreshTimer);removeDepthAttributions()}
-  function officialBounds(b){const n=Math.min(b.getNorth(),BB.n),s=Math.max(b.getSouth(),BB.s),e=Math.min(b.getEast(),BB.e),w=Math.max(b.getWest(),BB.w);return n>s&&e>w?{n,s,e,w,b}:null}
+  function clearOfficial(){removeLayer(officialDepthLayer);officialDepthLayer=null;officialDepthToken++;if(officialObjectUrl){try{URL.revokeObjectURL(officialObjectUrl)}catch{}officialObjectUrl=null}if(officialDepthAttribution){try{window.aaMap?.attributionControl?.removeAttribution('Tiefendaten © LfU Brandenburg')}catch{}officialDepthAttribution=false}}
+  function removeDepthAttributions(){clearGlobalDepth();if(globathyDepthAttribution){try{window.aaMap?.attributionControl?.removeAttribution('Seetiefen © GLOBathy · CC0 · modelliert')}catch{}globathyDepthAttribution=false}if(officialDepthAttribution){try{window.aaMap?.attributionControl?.removeAttribution('Tiefendaten © LfU Brandenburg')}catch{}officialDepthAttribution=false}}
+  function clearDepth(){clearGlobalDepth();removeLayer(globathyDepthLayer);globathyDepthLayer=null;removeLayer(officialDepthLayer);officialDepthLayer=null;lastLakeKey='';lakeDepthToken++;officialDepthToken++;if(officialObjectUrl){try{URL.revokeObjectURL(officialObjectUrl)}catch{}officialObjectUrl=null}clearTimeout(refreshTimer);removeDepthAttributions()}
+  function officialBounds(b){const n=Math.min(b.getNorth(),BB.n),s=Math.max(b.getSouth(),BB.s),e=Math.min(b.getEast(),BB.e),w=Math.max(b.getWest(),BB.w);return n>s&&e>w?{n,s,e,w}:null}
   function imageSize(map,bounds){const rect=map.getContainer().getBoundingClientRect(),fullW=Math.max(.001,bounds.getEast()-bounds.getWest()),fullH=Math.max(.001,bounds.getNorth()-bounds.getSouth());return {width:Math.max(320,Math.min(1100,Math.round(rect.width))),height:Math.max(320,Math.min(1100,Math.round(rect.height))),fullW,fullH,rect}}
   function lakeProbePosition(map){
     const w=window.aaCurrentWater,lat=Number(w?.latitude),lng=Number(w?.longitude);
@@ -66,17 +69,16 @@
     ctx.putImageData(img,0,0);return {url:canvas.toDataURL('image/png'),maxDepth:max,valid}
   }
   function applyLakeRaster(data,token){
-    if(!depthActive||token!==lakeDepthToken)return;const map=window.aaMap;if(!map)return;removeLayer(globathyDepthLayer);globathyDepthLayer=L.imageOverlay(data.url,L.latLngBounds([data.bbox[1],data.bbox[0]],[data.bbox[3],data.bbox[2]]),{opacity:.82,interactive:false,zIndex:430}).addTo(map);addDepthAttribution('globathy');
-    if(!officialDepthLayer)setStatus(text(`GLOBathy-Seetiefen aktiv · Modell · bis ca. ${data.maxDepth.toFixed(1)} m`,`GLOBathy lake depth active · model · up to about ${data.maxDepth.toFixed(1)} m`),'ok')
+    if(!depthActive||token!==lakeDepthToken||officialDepthLayer)return;const map=window.aaMap;if(!map)return;removeLayer(globathyDepthLayer);globathyDepthLayer=L.imageOverlay(data.url,L.latLngBounds([data.bbox[1],data.bbox[0]],[data.bbox[3],data.bbox[2]]),{opacity:.82,interactive:false,zIndex:430}).addTo(map);addDepthAttribution('globathy');setStatus(text(`GLOBathy-Seetiefen aktiv · Modell · bis ca. ${data.maxDepth.toFixed(1)} m`,`GLOBathy lake depth active · model · up to about ${data.maxDepth.toFixed(1)} m`),'ok')
   }
   async function refreshLakeDepth(){
-    if(!depthActive)return;const map=window.aaMap;if(!map)return;if(map.getZoom()<12){clearGlobathy();return}
+    if(!depthActive)return;const map=window.aaMap;if(!map)return;if(map.getZoom()<GLOBATHY_MIN_ZOOM){clearGlobathy();return}
     const pos=lakeProbePosition(map);if(pos.key===lastLakeKey&&globathyDepthLayer)return;lastLakeKey=pos.key;const token=++lakeDepthToken;
     try{
       let lake=lakeLookupCache.get(pos.key);if(!lake){const r=await fetch(`/api/hydrolakes-nearest?lat=${pos.lat.toFixed(6)}&lng=${pos.lng.toFixed(6)}`,{cache:'default'});if(!r.ok){if(token===lakeDepthToken){removeLayer(globathyDepthLayer);globathyDepthLayer=null}return}lake=await r.json();lakeLookupCache.set(pos.key,lake);while(lakeLookupCache.size>30)lakeLookupCache.delete(lakeLookupCache.keys().next().value)}
       const id=Number(lake?.Hylak_id);if(!Number.isFinite(id)||token!==lakeDepthToken)return;
       const cached=lakeRasterCache.get(id);if(cached){applyLakeRaster(cached,token);return}
-      if(!officialDepthLayer)setStatus(text('Seetiefen werden geladen …','Loading lake depth …'));
+      if(!officialDepthLayer)setStatus(text('Seetiefen werden geprüft …','Checking lake depth …'));
       await ensureGeoTiff();if(token!==lakeDepthToken)return;
       const rr=await fetch(`/api/globathy-raster?id=${id}`,{cache:'default'});if(!rr.ok)return;const buf=await rr.arrayBuffer();if(token!==lakeDepthToken)return;
       const tiff=await window.GeoTIFF.fromArrayBuffer(buf),image=await tiff.getImage(),bbox=image.getBoundingBox(),width=image.getWidth(),height=image.getHeight(),rasters=await image.readRasters({samples:[0]});
@@ -84,27 +86,39 @@
       const data={...painted,bbox,id};rememberRaster(id,data);applyLakeRaster(data,token)
     }catch{if(token===lakeDepthToken&&!officialDepthLayer)setStatus(text('Für diesen See konnten gerade keine modellierten Tiefendaten geladen werden.','Modelled depth data could not be loaded for this lake right now.'),'warn')}
   }
-
+  async function imageCoverage(blob){
+    let bitmap=null,url=null,img=null;try{
+      if(window.createImageBitmap)bitmap=await createImageBitmap(blob);else{url=URL.createObjectURL(blob);img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url})}
+      const iw=bitmap?.width||img?.naturalWidth||1,ih=bitmap?.height||img?.naturalHeight||1,scale=Math.min(1,256/Math.max(iw,ih)),cw=Math.max(1,Math.round(iw*scale)),ch=Math.max(1,Math.round(ih*scale)),c=document.createElement('canvas');c.width=cw;c.height=ch;const ctx=c.getContext('2d',{willReadFrequently:true});ctx.clearRect(0,0,cw,ch);ctx.drawImage(bitmap||img,0,0,cw,ch);const d=ctx.getImageData(0,0,cw,ch).data;let opaque=0;for(let i=3;i<d.length;i+=4)if(d[i]>12)opaque++;return opaque/(cw*ch)
+    }finally{try{bitmap?.close?.()}catch{}if(url)try{URL.revokeObjectURL(url)}catch{}}
+  }
+  async function refreshOfficialDepth(map,b){
+    const x=officialBounds(b);if(map.getZoom()<OFFICIAL_MIN_ZOOM||!x){clearOfficial();return}
+    const token=++officialDepthToken,fullW=Math.max(.001,b.getEast()-b.getWest()),fullH=Math.max(.001,b.getNorth()-b.getSouth()),rect=map.getContainer().getBoundingClientRect();
+    const width=Math.max(320,Math.min(1100,Math.round(rect.width*((x.e-x.w)/fullW)))),height=Math.max(320,Math.min(1100,Math.round(rect.height*((x.n-x.s)/fullH)))),officialUrl=`/api/depth-map?n=${x.n.toFixed(6)}&s=${x.s.toFixed(6)}&e=${x.e.toFixed(6)}&w=${x.w.toFixed(6)}&width=${width}&height=${height}`;
+    try{
+      const r=await fetch(officialUrl,{cache:'default'});if(!r.ok||token!==officialDepthToken)return;const blob=await r.blob(),coverage=await imageCoverage(blob);if(token!==officialDepthToken)return;
+      if(coverage<.002){removeLayer(officialDepthLayer);officialDepthLayer=null;if(officialObjectUrl){try{URL.revokeObjectURL(officialObjectUrl)}catch{}officialObjectUrl=null}if(officialDepthAttribution){try{map.attributionControl?.removeAttribution('Tiefendaten © LfU Brandenburg')}catch{}officialDepthAttribution=false}return}
+      const nextUrl=URL.createObjectURL(blob),next=L.imageOverlay(nextUrl,L.latLngBounds([x.s,x.w],[x.n,x.e]),{opacity:.9,interactive:false,zIndex:450});
+      removeLayer(officialDepthLayer);if(officialObjectUrl)try{URL.revokeObjectURL(officialObjectUrl)}catch{}officialObjectUrl=nextUrl;officialDepthLayer=next.addTo(map);addDepthAttribution('official');clearGlobathy();setStatus(text('Amtliche Seenvermessung aktiv · nur tatsächlich vermessene Bereiche werden angezeigt.','Official lake survey active · only actually surveyed areas are shown.'),'ok')
+    }catch{if(token===officialDepthToken&&!globathyDepthLayer)setStatus(text('Amtliche Tiefendaten konnten gerade nicht geladen werden.','Official depth data could not be loaded right now.'),'warn')}
+  }
+  function refreshGlobalDepth(map,b,n,s,e,w){
+    if(map.getZoom()>GEBCO_MAX_ZOOM){clearGlobalDepth();return}
+    const sz=imageSize(map,b),globalUrl=`/api/global-depth-map?n=${n.toFixed(6)}&s=${s.toFixed(6)}&e=${e.toFixed(6)}&w=${w.toFixed(6)}&width=${sz.width}&height=${sz.height}`,globalNext=L.imageOverlay(globalUrl,L.latLngBounds([s,w],[n,e]),{opacity:.42,interactive:false,zIndex:410});
+    setStatus(text('Globale Meerestiefen werden geladen …','Loading global ocean depth …'));
+    globalNext.once('load',()=>{if(!depthActive||map.getZoom()>GEBCO_MAX_ZOOM){removeLayer(globalNext);return}if(globalDepthLayer&&globalDepthLayer!==globalNext)removeLayer(globalDepthLayer);globalDepthLayer=globalNext;addDepthAttribution('global');setStatus(text('GEBCO-Weltansicht aktiv · für Seetiefen näher heranzoomen.','GEBCO world view active · zoom closer for lake depth.'),'ok');updateChecks()});
+    globalNext.once('error',()=>{removeLayer(globalNext);setStatus(text('Globale Meerestiefen konnten gerade nicht geladen werden.','Global ocean depth could not be loaded right now.'),'warn')});globalNext.addTo(map)
+  }
   function refreshDepth(){
     if(!depthActive)return;const map=window.aaMap;if(!map)return;clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>{
       if(!depthActive)return;const b=map.getBounds(),n=Math.min(90,b.getNorth()),s=Math.max(-90,b.getSouth()),w=Math.max(-180,b.getWest()),e=Math.min(360,b.getEast());if(n<=s||e<=w)return;
-      const sz=imageSize(map,b),globalUrl=`/api/global-depth-map?n=${n.toFixed(6)}&s=${s.toFixed(6)}&e=${e.toFixed(6)}&w=${w.toFixed(6)}&width=${sz.width}&height=${sz.height}`;
-      const globalNext=L.imageOverlay(globalUrl,L.latLngBounds([s,w],[n,e]),{opacity:.48,interactive:false,zIndex:410});
-      setStatus(text('Weltweite Tiefenkarte wird geladen …','Loading worldwide depth map …'));
-      globalNext.once('load',()=>{if(!depthActive){removeLayer(globalNext);return}if(globalDepthLayer&&globalDepthLayer!==globalNext)removeLayer(globalDepthLayer);globalDepthLayer=globalNext;addDepthAttribution('global');if(map.getZoom()<12)setStatus(text('GEBCO aktiv · für modellierte Seetiefen näher heranzoomen.','GEBCO active · zoom closer for modelled lake depth.'),'ok');updateChecks()});
-      globalNext.once('error',()=>{removeLayer(globalNext);setStatus(text('Globale Tiefenkarte konnte gerade nicht geladen werden.','Worldwide depth map could not be loaded right now.'),'warn')});globalNext.addTo(map);
-      refreshLakeDepth();
-
-      const x=officialBounds(b);if(!x){removeLayer(officialDepthLayer);officialDepthLayer=null;if(officialDepthAttribution){try{map.attributionControl?.removeAttribution('Tiefendaten © LfU Brandenburg')}catch{}officialDepthAttribution=false}return}
-      const fullW=Math.max(.001,b.getEast()-b.getWest()),fullH=Math.max(.001,b.getNorth()-b.getSouth()),rect=map.getContainer().getBoundingClientRect();
-      const width=Math.max(320,Math.min(1100,Math.round(rect.width*((x.e-x.w)/fullW)))),height=Math.max(320,Math.min(1100,Math.round(rect.height*((x.n-x.s)/fullH))));
-      const officialUrl=`/api/depth-map?n=${x.n.toFixed(6)}&s=${x.s.toFixed(6)}&e=${x.e.toFixed(6)}&w=${x.w.toFixed(6)}&width=${width}&height=${height}`;
-      const officialNext=L.imageOverlay(officialUrl,L.latLngBounds([x.s,x.w],[x.n,x.e]),{opacity:.88,interactive:false,zIndex:450});
-      officialNext.once('load',()=>{if(!depthActive){removeLayer(officialNext);return}if(officialDepthLayer&&officialDepthLayer!==officialNext)removeLayer(officialDepthLayer);officialDepthLayer=officialNext;addDepthAttribution('official');setStatus(text('Amtliche Brandenburg-Seenvermessung aktiv · GLOBathy/GEBCO ergänzen im Hintergrund.','Official Brandenburg lake survey active · GLOBathy/GEBCO supplement in the background.'),'ok')});
-      officialNext.once('error',()=>removeLayer(officialNext));officialNext.addTo(map)
+      refreshGlobalDepth(map,b,n,s,e,w);
+      if(map.getZoom()>GEBCO_MAX_ZOOM){clearGlobalDepth();if(map.getZoom()<OFFICIAL_MIN_ZOOM)setStatus(text('Für Seetiefen weiter hineinzoomen.','Zoom closer for lake depth.'),'ok');else setStatus(text('Seetiefen werden geprüft …','Checking lake depth …'))}
+      refreshLakeDepth();refreshOfficialDepth(map,b)
     },160)
   }
-  function selectLayer(type){const map=window.aaMap;if(!map)return;if(type==='depth'){depthActive=!depthActive;if(depthActive)refreshDepth();else{clearDepth();setStatus(text('Meer weltweit; Seetiefen werden beim Hineinzoomen geladen. GLOBathy-Werte sind modelliert.','Worldwide ocean depth; lake depth loads when zooming in. GLOBathy values are modelled.'))}}else{depthActive=false;clearDepth();setMapStyle(type==='satellite'?'satellite':'osm');setStatus(text('Meer weltweit; Seetiefen werden beim Hineinzoomen geladen. GLOBathy-Werte sind modelliert.','Worldwide ocean depth; lake depth loads when zooming in. GLOBathy values are modelled.'))}updateChecks();closeMenu()}
+  function selectLayer(type){const map=window.aaMap;if(!map)return;if(type==='depth'){depthActive=!depthActive;if(depthActive)refreshDepth();else{clearDepth();setStatus(text('Meer weltweit; Seetiefen beim Hineinzoomen. Amtliche Daten haben Vorrang vor Modellen.','Worldwide ocean depth; lake depth when zooming in. Official surveys take priority over models.'))}}else{depthActive=false;clearDepth();setMapStyle(type==='satellite'?'satellite':'osm');setStatus(text('Meer weltweit; Seetiefen beim Hineinzoomen. Amtliche Daten haben Vorrang vor Modellen.','Worldwide ocean depth; lake depth when zooming in. Official surveys take priority over models.'))}updateChecks();closeMenu()}
   function openMenu(){ensureMenu();if(!menu)return;menu.classList.remove('hidden');q('#aaSearchBtn')?.classList.add('aa-layer-menu-active');updateChecks()}
   function closeMenu(){menu?.classList.add('hidden');q('#aaSearchBtn')?.classList.remove('aa-layer-menu-active')}
   function toggleMenu(){ensureMenu();if(!menu)return;menu.classList.contains('hidden')?openMenu():closeMenu()}
