@@ -42,7 +42,7 @@
     try{
       if(wantsLocation){try{location=await currentGps();exactLocationShared=true}catch(e){toast('Standort nicht verfügbar – Fang wird ohne Kartenposition gespeichert.')}}
       if(btn)btn.textContent=file?'Foto wird hochgeladen …':'Fang wird gespeichert …';uploaded=await uploadPhoto(file,visibility);if(btn)btn.textContent='Fang wird gespeichert …';
-      const {error}=await sb.from('catches').insert({user_id:aaUser.id,species,caught_on:new Date().toISOString().slice(0,10),length_cm:length,weight_kg:weight,bait,method,water_id:waterId,water_name:waterName,visibility,latitude:location?.latitude||null,longitude:location?.longitude||null,exact_location_shared:exactLocationShared,photo_url:uploaded?.photoUrl||null,photo_bucket:uploaded?.bucket||null,photo_path:uploaded?.path||null});
+      const {error}=await sb.from('catches').insert({user_id:aaUser.id,species,caught_on:new Date().toISOString().slice(0,10),length_cm:length,weight_kg:weight,bait,method,water_id:waterId,water_name:waterName,visibility,latitude:location?.latitude??null,longitude:location?.longitude??null,exact_location_shared:exactLocationShared,photo_url:uploaded?.photoUrl||null,photo_bucket:uploaded?.bucket||null,photo_path:uploaded?.path||null});
       if(error)throw error;
       toast(visibility==='public'?(exactLocationShared?'Fang + Fangort veröffentlicht.':'Fang veröffentlicht.'):'Fang privat gespeichert.');
       const photo=q('#aaCatchPhoto'),preview=q('#aaCatchPhotoPreview'),img=preview?.querySelector('img');if(photo)photo.value='';if(img?.dataset.url){URL.revokeObjectURL(img.dataset.url);delete img.dataset.url;img.removeAttribute('src')}if(preview)preview.style.display='none';
